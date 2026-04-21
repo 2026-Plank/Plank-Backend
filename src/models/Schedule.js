@@ -1,19 +1,28 @@
 const db = require('../config/db.config');
 
 const Schedule = {
-  // 일정 및 할 일 생성 [cite: 145]
-  create: async (data) => {
-    const { teamId, type, title, description, dpName, targetDate } = data;
+  // 일정 추가 [cite: 144-146]
+  create: async (teamId, type, scheduleName, description, dpName, scheduleDate) => {
     const query = `INSERT INTO tasks_schedules (teamId, type, title, description, dpName, status, targetDate) 
                    VALUES (?, ?, ?, ?, ?, 'Wait', ?)`;
-    return await db.execute(query, [teamId, type, title, description, dpName, targetDate]);
+    const [result] = await db.execute(query, [teamId, type, scheduleName, description, dpName, scheduleDate]);
+    return result;
   },
 
-  // 팀별 일정 조회 [cite: 144]
-  findByTeamId: async (teamId) => {
-    const query = `SELECT * FROM tasks_schedules WHERE teamId = ? ORDER BY targetDate ASC`;
-    const [rows] = await db.execute(query, [teamId]);
-    return rows;
+  // 일정 수정 [cite: 148]
+  update: async (scheduleName, scheduleDate, description, dpName) => {
+    const query = `UPDATE tasks_schedules 
+                   SET targetDate = ?, description = ?, dpName = ? 
+                   WHERE title = ?`;
+    const [result] = await db.execute(query, [scheduleDate, description, dpName, scheduleName]);
+    return result;
+  },
+
+  // 일정 삭제 [cite: 148]
+  delete: async (scheduleName) => {
+    const query = `DELETE FROM tasks_schedules WHERE title = ?`;
+    const [result] = await db.execute(query, [scheduleName]);
+    return result;
   }
 };
 
