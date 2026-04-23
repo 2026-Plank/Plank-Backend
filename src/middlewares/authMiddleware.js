@@ -1,4 +1,4 @@
-const jwt = require('jsonwebtoken');
+const { verifyJwt } = require('../utils/jwtHelper');
 
 // 1. 로그인 상태 확인 미들웨어
 const verifyToken = (req, res, next) => {
@@ -6,7 +6,7 @@ const verifyToken = (req, res, next) => {
     if (!token) return res.status(401).json({ message: "인증 토큰이 없습니다." });
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'plank_secret_key');
+        const decoded = verifyJwt(token);
         req.user = decoded; // { userId, teamId, role, status }
 
         // 승인 대기 중인 사용자는 접근 제한

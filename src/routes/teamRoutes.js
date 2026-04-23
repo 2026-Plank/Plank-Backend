@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { verifyToken, verifyAdmin } = require('../middleware/auth');
+const { verifyToken, verifyAdmin } = require('../middlewares/authMiddleware');
 const { joinTeamRequest, getPendingMembers, approveMember } = require('../controllers/teamController');
 
 // 1. 일반 사용자(팀원) 라우트

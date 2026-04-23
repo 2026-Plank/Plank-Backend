@@ -101,6 +101,7 @@
     "wrappy": "^1.0.2"
   },
   "scripts": {
+    "start": "node src/app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -114,5 +115,6 @@
   "bugs": {
     "url": "https://github.com/2026-Plank/Plank-Backend/issues"
   },
-  "homepage": "https://github.com/2026-Plank/Plank-Backend#readme"
+  "homepage": "https://github.com/2026-Plank/Plank-Backend#readme",
+  "devDependencies": {}
 }
