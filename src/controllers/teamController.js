@@ -1,13 +1,14 @@
-const { createTeam, getTeams, joinTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService } = require('../services/teamService');
+const { createTeam, getTeams, joinTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService, inviteFriendToTeam, getInvitableFriends } = require('../services/teamService');
 const User = require('../models/User');
 
 const createTeamController = async (req, res) => {
   try {
-    const { name, deadline } = req.body;
+    const { name, deadline, department } = req.body;
     const user = await User.findById(req.user.id);
     const team = await createTeam({
       name,
       deadline,
+      department,
       creatorName: user?.name || user?.userid || 'unknown',
       creatorId: user.userid
     });
@@ -80,6 +81,29 @@ const getTeamDetailsController = async (req, res) => {
   }
 };
 
+const getInvitableFriendsController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(req.user.id);
+    const friends = await getInvitableFriends(id, user.userid);
+    res.json({ friends });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+const inviteFriendController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { friendId } = req.body;
+    const user = await User.findById(req.user.id);
+    const team = await inviteFriendToTeam(id, friendId, user.userid);
+    res.status(200).json({ message: 'Friend invited to the team', team });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
 const removeMemberController = async (req, res) => {
   try {
     const { id, userId } = req.params;
@@ -103,4 +127,4 @@ const updateMemberRoleController = async (req, res) => {
   }
 };
 
-module.exports = { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember, updateTeamController, deleteTeamController, getTeamDetailsController, removeMemberController, updateMemberRoleController };
+module.exports = { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember, updateTeamController, deleteTeamController, getTeamDetailsController, getInvitableFriendsController, inviteFriendController, removeMemberController, updateMemberRoleController };

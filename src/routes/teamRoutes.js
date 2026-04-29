@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, verifyAdmin } = require('../middlewares/authMiddleware');
-const { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember, updateTeamController, deleteTeamController, getTeamDetailsController, removeMemberController, updateMemberRoleController } = require('../controllers/teamController');
+const { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember, updateTeamController, deleteTeamController, getTeamDetailsController, getInvitableFriendsController, inviteFriendController, removeMemberController, updateMemberRoleController } = require('../controllers/teamController');
 
 router.get('/', verifyToken, getTeamsController);
 router.post('/create', verifyToken, createTeamController);
@@ -9,6 +9,8 @@ router.post('/join', verifyToken, joinTeamRequest);
 router.get('/pending', verifyToken, verifyAdmin, getPendingMembers);
 router.patch('/approve/:targetUserId', verifyToken, verifyAdmin, approveMember);
 router.get('/:id', verifyToken, getTeamDetailsController);
+router.get('/:id/inviteable-friends', verifyToken, getInvitableFriendsController);
+router.post('/:id/invite', verifyToken, inviteFriendController);
 router.put('/:id', verifyToken, updateTeamController);
 router.delete('/:id', verifyToken, deleteTeamController);
 router.delete('/:id/members/:userId', verifyToken, removeMemberController);
