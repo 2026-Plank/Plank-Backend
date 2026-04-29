@@ -1,4 +1,4 @@
-const { createTeam, getTeams, joinTeam } = require('../services/teamService');
+const { createTeam, getTeams, joinTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService } = require('../services/teamService');
 const User = require('../models/User');
 
 const createTeamController = async (req, res) => {
@@ -8,7 +8,8 @@ const createTeamController = async (req, res) => {
     const team = await createTeam({
       name,
       deadline,
-      creatorName: user?.name || user?.userid || 'unknown'
+      creatorName: user?.name || user?.userid || 'unknown',
+      creatorId: user.userid
     });
     res.status(201).json({ message: 'Team created', team });
   } catch (error) {
@@ -18,7 +19,8 @@ const createTeamController = async (req, res) => {
 
 const getTeamsController = async (req, res) => {
   try {
-    const teams = await getTeams();
+    const user = await User.findById(req.user.id);
+    const teams = await getTeams(user.userid);
     res.json({ teams });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -28,10 +30,11 @@ const getTeamsController = async (req, res) => {
 const joinTeamRequest = async (req, res) => {
   try {
     const { inviteCode } = req.body;
-    const team = await joinTeam(req.user.id, inviteCode);
-    res.status(200).json({ message: 'Team join request handled', team });
+    const user = await User.findById(req.user.id);
+    const team = await joinTeam(user.userid, inviteCode);
+    res.status(200).json({ message: 'Successfully joined the team', team });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
@@ -43,4 +46,61 @@ const approveMember = async (req, res) => {
   res.status(200).json({ message: 'Approval flow is not configured in current schema.' });
 };
 
-module.exports = { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember };
+const updateTeamController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    const user = await User.findById(req.user.id);
+    const team = await updateTeam(id, updates, user.userid);
+    res.json({ message: 'Team updated', team });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+const deleteTeamController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(req.user.id);
+    await deleteTeam(id, user.userid);
+    res.json({ message: 'Team deleted' });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+const getTeamDetailsController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(req.user.id);
+    const team = await getTeamDetails(id, user.userid);
+    res.json({ team });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+const removeMemberController = async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const user = await User.findById(req.user.id);
+    await removeTeamMember(id, userId, user.userid);
+    res.json({ message: 'Member removed' });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+const updateMemberRoleController = async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const { role } = req.body;
+    const user = await User.findById(req.user.id);
+    await updateMemberRoleService(id, userId, role, user.userid);
+    res.json({ message: 'Member role updated' });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+module.exports = { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember, updateTeamController, deleteTeamController, getTeamDetailsController, removeMemberController, updateMemberRoleController };

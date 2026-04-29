@@ -1,17 +1,56 @@
 const Feedback = require('../models/Feedback');
+const Team = require('../models/Team');
 const User = require('../models/User');
+
+const sanitizeUser = (user) => {
+  if (!user) return null;
+  const cloned = { ...user };
+  delete cloned.password;
+  return cloned;
+};
+
+const getCurrentUser = async (req) => {
+  const user = await User.findById(req.user.id);
+  if (!user) {
+    const error = new Error('Authenticated user was not found.');
+    error.statusCode = 401;
+    throw error;
+  }
+  return user;
+};
+
+const assertTeamMember = async (teamId, user) => {
+  if (!teamId) return;
+
+  const isMember = await Team.isMember(teamId, user.userid);
+  if (!isMember) {
+    const error = new Error('You do not have permission to use feedback for this team.');
+    error.statusCode = 403;
+    throw error;
+  }
+};
+
+const normalizeRating = (rating) => {
+  const parsed = Number(rating ?? 5);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+    const error = new Error('Rating must be an integer from 1 to 5.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return parsed;
+};
 
 const mapFeedbackWithUsers = async (feedbacks) => {
   return Promise.all(
     feedbacks.map(async (feedback) => {
       const fromUser = await User.findById(feedback.fromUserId);
       const toUser = await User.findById(feedback.toUserId);
-      if (fromUser) delete fromUser.password;
-      if (toUser) delete toUser.password;
+
       return {
         ...feedback,
-        fromUser,
-        toUser
+        fromUser: sanitizeUser(fromUser),
+        toUser: sanitizeUser(toUser),
+        audience: feedback.teamId ? 'team' : 'personal'
       };
     })
   );
@@ -20,22 +59,40 @@ const mapFeedbackWithUsers = async (feedbacks) => {
 const createFeedback = async (req, res) => {
   try {
     const { toUserId, teamId, content, rating } = req.body;
-    if (!toUserId || !content?.trim()) {
-      return res.status(400).json({ error: '대상 사용자와 피드백 내용을 입력해주세요.' });
+    const trimmedContent = content?.trim();
+
+    if (!trimmedContent) {
+      return res.status(400).json({ error: 'Feedback content is required.' });
     }
-    if (Number(toUserId) === Number(req.user.id)) {
-      return res.status(400).json({ error: '자기 자신에게는 피드백을 남길 수 없습니다.' });
+
+    const currentUser = await getCurrentUser(req);
+    const isTeamFeedback = Boolean(teamId);
+    await assertTeamMember(teamId, currentUser);
+
+    // Team feedback is authored by the logged-in user and visible to the whole team.
+    // Keep toUserId populated for compatibility with the existing NOT NULL schema.
+    const targetUserId = isTeamFeedback ? currentUser.id : toUserId;
+
+    if (!targetUserId) {
+      return res.status(400).json({ error: 'Target user is required.' });
     }
+
+    if (!isTeamFeedback && Number(targetUserId) === Number(currentUser.id)) {
+      return res.status(400).json({ error: 'Personal feedback cannot target yourself.' });
+    }
+
     const feedback = await Feedback.create({
-      fromUserId: req.user.id,
-      toUserId,
+      fromUserId: currentUser.id,
+      toUserId: targetUserId,
       teamId,
-      content: content.trim(),
-      rating: rating || 5
+      content: trimmedContent,
+      rating: normalizeRating(rating)
     });
-    res.status(201).json({ message: 'Feedback created', feedback });
+
+    const [mappedFeedback] = await mapFeedbackWithUsers([feedback]);
+    res.status(201).json({ message: 'Feedback created', feedback: mappedFeedback });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
@@ -51,29 +108,35 @@ const getFeedbacks = async (req, res) => {
 
 const getMyReceivedFeedbacks = async (req, res) => {
   try {
-    const feedbacks = await Feedback.find({ toUserId: req.user.id });
+    const currentUser = await getCurrentUser(req);
+    const feedbacks = await Feedback.find({ toUserId: currentUser.id });
     res.json({ feedbacks: await mapFeedbackWithUsers(feedbacks) });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const getMySentFeedbacks = async (req, res) => {
   try {
-    const feedbacks = await Feedback.find({ fromUserId: req.user.id });
+    const currentUser = await getCurrentUser(req);
+    const feedbacks = await Feedback.find({ fromUserId: currentUser.id });
     res.json({ feedbacks: await mapFeedbackWithUsers(feedbacks) });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const getTeamFeedbacks = async (req, res) => {
   try {
     const { teamId } = req.params;
+    const currentUser = await getCurrentUser(req);
+
+    await assertTeamMember(teamId, currentUser);
+
     const feedbacks = await Feedback.findByTeamId(teamId);
     res.json({ feedbacks: await mapFeedbackWithUsers(feedbacks) });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
