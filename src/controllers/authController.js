@@ -1,4 +1,4 @@
-const { register, login, approveUser } = require('../services/authService');
+/* const { register, login, approveUser } = require('../services/authService');
 
 const signup = async (req, res) => {
   try {
@@ -34,12 +34,107 @@ const signin = async (req, res) => {
 
 const approve = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId } = req.params;  
     const user = await approveUser(userId);
     res.json({ message: 'User approved', user });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
-};
+}; 
 
 module.exports = { signup, signin, approve };
+ */
+
+const bcrypt = require('bcrypt');
+const { execute } = require('../config/db.config');
+const { generateToken } = require('../utils/jwtHelper');
+
+// 회원가입
+exports.sign = async (req, res) => {
+  const { userId, pw, email, name } = req.body;
+
+  // 1. 입력값 체크
+  if (!userId || !pw || !email || !name) {
+    return res.status(400).json({ message: "모든 값을 입력하세요" });
+  }
+
+  try {
+    // 2. 중복 체크
+    const exist = await execute(
+      `SELECT USERID FROM USERS WHERE USERID = :userId`,
+      { userId }
+    );
+
+    if (exist.rows.length > 0) {
+      return res.status(409).json({ message: "이미 존재하는 아이디" });
+    }
+
+    // 3. 비밀번호 암호화
+    const hashedPw = await bcrypt.hash(pw, 10);
+
+    // 4. 회원가입
+    await execute(
+      `INSERT INTO USERS (USERID, PASSWORD, EMAIL, NAME)
+             VALUES (:userId, :pw, :email, :name)`,
+      {
+        userId,
+        pw: hashedPw,
+        email,
+        name
+      }
+    );
+
+    res.json({ message: "회원가입 성공" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "서버 오류" });
+  }
+};
+
+
+// 로그인
+exports.login = async (req, res) => {
+  const { userId, pw } = req.body;
+
+  if (!userId || !pw) {
+    return res.status(400).json({ message: "아이디/비밀번호 입력" });
+  }
+
+  try {
+    // 1. 유저 조회
+    const result = await execute(
+      `SELECT USERID, PASSWORD FROM USERS WHERE USERID = :userId`,
+      { userId }
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ message: "아이디 없음" });
+    }
+
+    const user = result.rows[0];
+
+    // 2. 비밀번호 비교
+    const isMatch = await bcrypt.compare(pw, user.PASSWORD);
+
+    if (!isMatch) {
+      return res.status(401).json({ message: "비밀번호 틀림" });
+    }
+
+    // 3. 토큰 생성
+    const token = generateToken({ userId: user.USERID });
+
+    res.json({
+      message: "로그인 성공",
+      token,
+      user: {
+        userId: user.USERID,
+        name: user.NAME || user.USERID
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "서버 오류" });
+  }
+};

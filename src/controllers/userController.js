@@ -1,3 +1,4 @@
+const { execute } = require('../config/db.config');
 const User = require('../models/User');
 const Friend = require('../models/Friend');
 
@@ -18,13 +19,33 @@ const getProfile = async (req, res) => {
 };
 
 const updateProfile = async (req, res) => {
-  try {
-    const updates = req.body;
-    const user = await User.findByIdAndUpdate(req.user.id, updates);
-    res.json({ message: 'Profile updated', user: sanitizeUser(user) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  const userId = req.user.id;
+  const { name, job, status } = req.body;
+
+  await execute(
+    `UPDATE USERS 
+     SET NAME = NVL(:name, NAME),
+         JOB = NVL(:job, JOB),
+         STATUS_MESSAGE = NVL(:status, STATUS_MESSAGE)
+     WHERE USERID = :userId`,
+    { name, job, status, userId }
+  );
+  
+  const result = await execute(
+    `SELECT NAME, JOB, STATUS_MESSAGE FROM USERS WHERE USERID = :userId`,
+    { userId }
+  );
+
+  const row = result.rows[0];
+
+  res.json({
+    user: {
+      userId,
+      name: row.NAME,
+      job: row.JOB,
+      status: row.STATUS_MESSAGE
+    }
+  });
 };
 
 const getFriends = async (req, res) => {
@@ -63,6 +84,31 @@ const getFriendRequests = async (req, res) => {
     res.json({ requests: detailed.filter(Boolean) });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+exports.updateUser = async (req, res) => {
+  const { name, job, status } = req.body;
+  const userId = req.user.userId; // JWT에서
+
+  try {
+    await execute(
+      `UPDATE USERS 
+             SET NAME = :name,
+                 JOB = :job,
+                 STATUS_MESSAGE = :status
+             WHERE USERID = :userId`,
+      { name, job, status, userId }
+    );
+
+    res.json({
+      message: "업데이트 성공",
+      user: { userId, name, job, status }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "서버 오류" });
   }
 };
 
