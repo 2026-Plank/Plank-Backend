@@ -10,8 +10,21 @@ const mapRow = (row) => {
     dpNum: row.dpNum,
     dpName: row.dpName,
     dpLeader: row.dpLeader,
-    deadline: row.deadline
+    deadline: row.deadline,
+    role: row.role
   };
+};
+
+const parseMemberRole = (role = '') => {
+  const value = String(role || '');
+  if (value === 'Admin') {
+    return { role: value, department: '기획자', jobDetail: '프로젝트 리더' };
+  }
+  if (!value.startsWith('Member|')) {
+    return { role: value || 'User', department: '', jobDetail: '' };
+  }
+  const [, department = '', jobDetail = ''] = value.split('|');
+  return { role: value, department, jobDetail };
 };
 
 const create = async ({ name, personnel, teamCode, dpNum, dpName, dpLeader, deadline }) => {
@@ -103,7 +116,10 @@ const update = async (id, updates) => {
     deadline: 'deadline'
   };
 
-  const setClauses = fields.map((field) => `${columnMap[field] || field} = :${field}`);
+  const setClauses = fields.map((field) => {
+    const column = columnMap[field] || field;
+    return field === 'deadline' ? `${column} = TO_DATE(:${field}, 'YYYY-MM-DD')` : `${column} = :${field}`;
+  });
   const binds = { id, ...updates };
   const sql = `UPDATE teams SET ${setClauses.join(', ')} WHERE id = :id`;
   await execute(sql, binds);
@@ -128,7 +144,8 @@ const getMembers = async (teamId) => {
     id: row.id,
     role: row.role,
     name: row.name,
-    email: row.email
+    email: row.email,
+    ...parseMemberRole(row.role)
   }));
 };
 

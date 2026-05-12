@@ -1,4 +1,4 @@
-const { createTeam, getTeams, joinTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService, inviteFriendToTeam, getInvitableFriends } = require('../services/teamService');
+const { createTeam, getTeams, joinTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService, inviteFriendToTeam, getInvitableFriends, updateMyDepartment } = require('../services/teamService');
 const User = require('../models/User');
 
 const createTeamController = async (req, res) => {
@@ -85,7 +85,7 @@ const getInvitableFriendsController = async (req, res) => {
   try {
     const { id } = req.params;
     const user = await User.findById(req.user.id);
-    const friends = await getInvitableFriends(id, user.userid);
+    const friends = await getInvitableFriends(id, user);
     res.json({ friends });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });
@@ -97,7 +97,7 @@ const inviteFriendController = async (req, res) => {
     const { id } = req.params;
     const { friendId } = req.body;
     const user = await User.findById(req.user.id);
-    const team = await inviteFriendToTeam(id, friendId, user.userid);
+    const team = await inviteFriendToTeam(id, friendId, user);
     res.status(200).json({ message: 'Friend invited to the team', team });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });
@@ -127,4 +127,16 @@ const updateMemberRoleController = async (req, res) => {
   }
 };
 
-module.exports = { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember, updateTeamController, deleteTeamController, getTeamDetailsController, getInvitableFriendsController, inviteFriendController, removeMemberController, updateMemberRoleController };
+const updateMyDepartmentController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { department, jobDetail } = req.body;
+    const user = await User.findById(req.user.id);
+    const member = await updateMyDepartment(id, user.userid, department, jobDetail);
+    res.json({ message: 'Department selected', member });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+module.exports = { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember, updateTeamController, deleteTeamController, getTeamDetailsController, getInvitableFriendsController, inviteFriendController, removeMemberController, updateMemberRoleController, updateMyDepartmentController };

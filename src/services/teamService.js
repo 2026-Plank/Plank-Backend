@@ -23,7 +23,8 @@ const normalizeTeam = (team) => {
     dpNum: team.dpNum,
     dpName: team.dpName,
     dpLeader: team.dpLeader,
-    deadline: formatDate(team.deadline)
+    deadline: formatDate(team.deadline),
+    role: team.role
   };
 };
 
@@ -85,18 +86,22 @@ const getTeamMembers = async () => {
   return await User.find({});
 };
 
-const getInvitableFriends = async (teamId, userId) => {
-  const friendships = await Friend.findAcceptedByUser(userId);
+const getInvitableFriends = async (teamId, user) => {
+  const userPk = user?.id;
+  const userLoginId = user?.userid;
+  const friendships = await Friend.findAcceptedByUser(userPk);
   const teamMembers = await Team.getMembers(teamId);
-  const memberIdSet = new Set(teamMembers.map((m) => Number(m.id)));
+  const memberIdSet = new Set(teamMembers.map((m) => String(m.id)));
 
   const invitableFriends = await Promise.all(friendships.map(async (relation) => {
-    const friendUserId = Number(relation.userId) === Number(userId) ? relation.friendId : relation.userId;
-    if (memberIdSet.has(Number(friendUserId))) return null;
-    const friendUser = await User.findById(friendUserId);
+    const friendPk = Number(relation.userId) === Number(userPk) ? relation.friendId : relation.userId;
+    const friendUser = await User.findById(friendPk);
     if (!friendUser) return null;
+    if (memberIdSet.has(String(friendUser.userid))) return null;
+    if (String(friendUser.userid) === String(userLoginId)) return null;
     return {
-      id: friendUser.id,
+      id: friendUser.userid,
+      userPk: friendUser.id,
       userid: friendUser.userid,
       email: friendUser.email,
       name: friendUser.name,
@@ -108,43 +113,47 @@ const getInvitableFriends = async (teamId, userId) => {
   return invitableFriends.filter(Boolean);
 };
 
-const inviteFriendToTeam = async (teamId, friendId, userId) => {
+const inviteFriendToTeam = async (teamId, friendId, user) => {
+  const userPk = user?.id;
+  const userLoginId = user?.userid;
   const members = await Team.getMembers(teamId);
-  const userMember = members.find((m) => Number(m.id) === Number(userId));
+  const userMember = members.find((m) => String(m.id) === String(userLoginId));
   if (!userMember || userMember.role !== 'Admin') {
     const error = new Error('팀 관리자 권한이 필요합니다.');
     error.statusCode = 403;
     throw error;
   }
 
-  if (Number(friendId) === Number(userId)) {
+  if (String(friendId) === String(userLoginId) || String(friendId) === String(userPk)) {
     const error = new Error('자기 자신을 초대할 수 없습니다.');
     error.statusCode = 400;
     throw error;
   }
 
-  const friendUser = await User.findById(friendId);
+  const friendUser = Number.isFinite(Number(friendId))
+    ? await User.findById(friendId) || await User.findOne({ userid: friendId })
+    : await User.findOne({ userid: friendId });
   if (!friendUser) {
     const error = new Error('초대할 사용자를 찾을 수 없습니다.');
     error.statusCode = 404;
     throw error;
   }
 
-  const friendship = await Friend.findPair(userId, friendId);
+  const friendship = await Friend.findPair(userPk, friendUser.id);
   if (!friendship || friendship.status !== 'accepted') {
     const error = new Error('친구 관계가 아니면 초대할 수 없습니다.');
     error.statusCode = 403;
     throw error;
   }
 
-  const alreadyMember = await Team.isMember(teamId, friendId);
+  const alreadyMember = await Team.isMember(teamId, friendUser.userid);
   if (alreadyMember) {
     const error = new Error('이미 팀에 참여한 사용자입니다.');
     error.statusCode = 400;
     throw error;
   }
 
-  await Team.addMember(teamId, friendId, 'User');
+  await Team.addMember(teamId, friendUser.userid, 'User');
   const updatedMembers = await Team.getMembers(teamId);
   await Team.update(teamId, { personnel: updatedMembers.length });
   return normalizeTeam({ ...await Team.findOne({ id: teamId }), personnel: updatedMembers.length });
@@ -153,21 +162,33 @@ const inviteFriendToTeam = async (teamId, friendId, userId) => {
 const updateTeam = async (teamId, updates, userId) => {
   // Check if user is admin of the team
   const members = await Team.getMembers(teamId);
-  const userMember = members.find((m) => Number(m.id) === Number(userId));
+  const userMember = members.find((m) => String(m.id) === String(userId));
   if (!userMember || userMember.role !== 'Admin') {
     const error = new Error('팀 관리자 권한이 필요합니다.');
     error.statusCode = 403;
     throw error;
   }
 
-  const team = await Team.update(teamId, updates);
+  const allowedFields = ['name', 'personnel', 'teamCode', 'dpNum', 'dpName', 'dpLeader', 'deadline'];
+  const normalizedUpdates = Object.fromEntries(
+    Object.entries(updates || {}).filter(([key, value]) => allowedFields.includes(key) && value !== undefined && value !== null && value !== '')
+  );
+
+  if (normalizedUpdates.deadline) {
+    normalizedUpdates.deadline = formatDate(normalizedUpdates.deadline);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedUpdates.deadline)) {
+      delete normalizedUpdates.deadline;
+    }
+  }
+
+  const team = await Team.update(teamId, normalizedUpdates);
   return normalizeTeam(team);
 };
 
 const deleteTeam = async (teamId, userId) => {
   // Check if user is admin of the team
   const members = await Team.getMembers(teamId);
-  const userMember = members.find((m) => m.id === userId);
+  const userMember = members.find((m) => String(m.id) === String(userId));
   if (!userMember || userMember.role !== 'Admin') {
     const error = new Error('팀 관리자 권한이 필요합니다.');
     error.statusCode = 403;
@@ -194,14 +215,14 @@ const getTeamDetails = async (teamId, userId) => {
 const removeTeamMember = async (teamId, targetUserId, userId) => {
   // Check if user is admin
   const members = await Team.getMembers(teamId);
-  const userMember = members.find((m) => m.id === userId);
+  const userMember = members.find((m) => String(m.id) === String(userId));
   if (!userMember || userMember.role !== 'Admin') {
     const error = new Error('팀 관리자 권한이 필요합니다.');
     error.statusCode = 403;
     throw error;
   }
 
-  if (targetUserId === userId) {
+  if (String(targetUserId) === String(userId)) {
     const error = new Error('자기 자신을 제거할 수 없습니다.');
     error.statusCode = 400;
     throw error;
@@ -215,7 +236,7 @@ const removeTeamMember = async (teamId, targetUserId, userId) => {
 const updateMemberRoleService = async (teamId, targetUserId, role, userId) => {
   // Check if user is admin
   const members = await Team.getMembers(teamId);
-  const userMember = members.find((m) => m.id === userId);
+  const userMember = members.find((m) => String(m.id) === String(userId));
   if (!userMember || userMember.role !== 'Admin') {
     const error = new Error('팀 관리자 권한이 필요합니다.');
     error.statusCode = 403;
@@ -225,4 +246,31 @@ const updateMemberRoleService = async (teamId, targetUserId, role, userId) => {
   await Team.updateMemberRole(teamId, targetUserId, role);
 };
 
-module.exports = { createTeam, getTeams, joinTeam, getTeamMembers, getInvitableFriends, inviteFriendToTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService };
+const updateMyDepartment = async (teamId, userId, department, jobDetail = '') => {
+  const normalizedDepartment = String(department || '').trim();
+  const allowedDepartments = ['개발자', '디자이너', '기획자'];
+  if (!allowedDepartments.includes(normalizedDepartment)) {
+    const error = new Error('부서를 선택해주세요.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const isMember = await Team.isMember(teamId, userId);
+  if (!isMember) {
+    const error = new Error('팀 멤버만 부서를 선택할 수 있습니다.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const members = await Team.getMembers(teamId);
+  const currentMember = members.find((member) => String(member.id) === String(userId));
+  if (currentMember?.role === 'Admin') {
+    return { department: '기획자', jobDetail: '프로젝트 리더', role: 'Admin' };
+  }
+
+  const role = `Member|${normalizedDepartment}|${String(jobDetail || '').trim()}`;
+  await Team.updateMemberRole(teamId, userId, role);
+  return { department: normalizedDepartment, jobDetail: String(jobDetail || '').trim(), role };
+};
+
+module.exports = { createTeam, getTeams, joinTeam, getTeamMembers, getInvitableFriends, inviteFriendToTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService, updateMyDepartment };
