@@ -157,6 +157,7 @@ const getMembers = async (teamId) => {
                       tm.role AS "role",
                       tm.department AS "department",
                       tm.jobdetail AS "jobDetail",
+                      u.id AS "userPk",
                       u.name AS "name",
                       u.email AS "email"
                FROM team_members tm
@@ -167,6 +168,7 @@ const getMembers = async (teamId) => {
   return result.rows.map((row) => ({
     id: row.id,
     role: row.role,
+    userPk: row.userPk,
     name: row.name,
     email: row.email,
     ...parseMemberRole(row.role),
