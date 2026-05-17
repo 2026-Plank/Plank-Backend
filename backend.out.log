@@ -1,0 +1,4 @@
+◇ injected env (5) from .env // tip: ⌘ suppress logs { quiet: true }
+◇ injected env (0) from .env // tip: ⌘ enable debugging { debug: true }
+Oracle DB connected
+Server running on port 3000
