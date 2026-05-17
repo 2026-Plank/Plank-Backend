@@ -4,6 +4,8 @@ const bodyParser = require('body-parser');
 
 const app = express();
 
+const { connectDB } = require('./config/db.config');
+
 // Middleware
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
@@ -26,9 +28,34 @@ app.use('/api/schedules', scheduleRoutes);
 app.use('/api/chats', chatRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/feedbacks', feedbackRoutes);
+const authController = require('./controllers/authController');
+app.post('/login', authController.login);
+app.post('/sign', authController.sign);
+
+app.use((req, res, next) => {
+    console.log("요청 경로:", req.originalUrl);
+    next();
+});
+
+app.use(cors({
+    origin: true,
+    credentials: true
+}));
 
 // Error handler
 const errorHandler = require('./middlewares/errorHandler');
 app.use(errorHandler);
+
+const PORT = process.env.PORT || 3000;
+
+const startServer = async () => {
+    await connectDB();
+
+    app.listen(PORT, () => {
+        console.log(`서버 실행됨: http://localhost:${PORT}`);
+    });
+};
+
+startServer();
 
 module.exports = app;
