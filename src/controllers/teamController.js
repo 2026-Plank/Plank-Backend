@@ -1,10 +1,22 @@
 const { createTeam, getTeams, joinTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService, inviteFriendToTeam, getInvitableFriends, updateMyDepartment } = require('../services/teamService');
 const User = require('../models/User');
 
+const getCurrentUser = async (req) => {
+  const user = req.user?.id
+    ? await User.findById(req.user.id)
+    : await User.findOne({ userid: req.user?.userId });
+  if (!user) {
+    const error = new Error('Authenticated user was not found.');
+    error.statusCode = 401;
+    throw error;
+  }
+  return user;
+};
+
 const createTeamController = async (req, res) => {
   try {
     const { name, deadline, department } = req.body;
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     const team = await createTeam({
       name,
       deadline,
@@ -20,7 +32,7 @@ const createTeamController = async (req, res) => {
 
 const getTeamsController = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     const teams = await getTeams(user.userid);
     res.json({ teams });
   } catch (error) {
@@ -31,7 +43,7 @@ const getTeamsController = async (req, res) => {
 const joinTeamRequest = async (req, res) => {
   try {
     const { inviteCode } = req.body;
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     const team = await joinTeam(user.userid, inviteCode);
     res.status(200).json({ message: 'Successfully joined the team', team });
   } catch (error) {
@@ -51,7 +63,7 @@ const updateTeamController = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     const team = await updateTeam(id, updates, user.userid);
     res.json({ message: 'Team updated', team });
   } catch (error) {
@@ -62,7 +74,7 @@ const updateTeamController = async (req, res) => {
 const deleteTeamController = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     await deleteTeam(id, user.userid);
     res.json({ message: 'Team deleted' });
   } catch (error) {
@@ -73,7 +85,7 @@ const deleteTeamController = async (req, res) => {
 const getTeamDetailsController = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     const team = await getTeamDetails(id, user.userid);
     res.json({ team });
   } catch (error) {
@@ -84,7 +96,7 @@ const getTeamDetailsController = async (req, res) => {
 const getInvitableFriendsController = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     const friends = await getInvitableFriends(id, user);
     res.json({ friends });
   } catch (error) {
@@ -96,7 +108,7 @@ const inviteFriendController = async (req, res) => {
   try {
     const { id } = req.params;
     const { friendId } = req.body;
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     const team = await inviteFriendToTeam(id, friendId, user);
     res.status(200).json({ message: 'Friend invited to the team', team });
   } catch (error) {
@@ -107,7 +119,7 @@ const inviteFriendController = async (req, res) => {
 const removeMemberController = async (req, res) => {
   try {
     const { id, userId } = req.params;
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     await removeTeamMember(id, userId, user.userid);
     res.json({ message: 'Member removed' });
   } catch (error) {
@@ -119,7 +131,7 @@ const updateMemberRoleController = async (req, res) => {
   try {
     const { id, userId } = req.params;
     const { role } = req.body;
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     await updateMemberRoleService(id, userId, role, user.userid);
     res.json({ message: 'Member role updated' });
   } catch (error) {
@@ -131,7 +143,7 @@ const updateMyDepartmentController = async (req, res) => {
   try {
     const { id } = req.params;
     const { department, jobDetail } = req.body;
-    const user = await User.findById(req.user.id);
+    const user = await getCurrentUser(req);
     const member = await updateMyDepartment(id, user.userid, department, jobDetail);
     res.json({ message: 'Department selected', member });
   } catch (error) {

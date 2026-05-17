@@ -10,7 +10,9 @@ const sanitizeUser = (user) => {
 };
 
 const getCurrentUser = async (req) => {
-  const user = await User.findById(req.user.id);
+  const user = req.user?.id
+    ? await User.findById(req.user.id)
+    : await User.findOne({ userid: req.user?.userId });
   if (!user) {
     const error = new Error('Authenticated user was not found.');
     error.statusCode = 401;
