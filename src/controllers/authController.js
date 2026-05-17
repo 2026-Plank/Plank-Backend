@@ -104,7 +104,7 @@ exports.login = async (req, res) => {
   try {
     // 1. 유저 조회
     const result = await execute(
-      `SELECT USERID, PASSWORD FROM USERS WHERE USERID = :userId`,
+      `SELECT ID AS "id", USERID AS "userid", PASSWORD AS "password", NAME AS "name" FROM USERS WHERE USERID = :userId`,
       { userId }
     );
 
@@ -115,21 +115,22 @@ exports.login = async (req, res) => {
     const user = result.rows[0];
 
     // 2. 비밀번호 비교
-    const isMatch = await bcrypt.compare(pw, user.PASSWORD);
+    const isMatch = await bcrypt.compare(pw, user.password);
 
     if (!isMatch) {
       return res.status(401).json({ message: "비밀번호 틀림" });
     }
 
     // 3. 토큰 생성
-    const token = generateToken({ userId: user.USERID });
+    const token = generateToken({ id: user.id, userId: user.userid });
 
     res.json({
       message: "로그인 성공",
       token,
       user: {
-        userId: user.USERID,
-        name: user.NAME || user.USERID
+        id: user.id,
+        userId: user.userid,
+        name: user.name || user.userid
       }
     });
 
