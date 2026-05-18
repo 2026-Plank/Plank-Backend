@@ -32,6 +32,41 @@ const assertTeamMember = async (teamId, user) => {
   }
 };
 
+const getFeedbackTarget = async ({ teamId, toUserId, currentUser }) => {
+  if (!toUserId) {
+    const error = new Error('Target user is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const targetUser = Number.isFinite(Number(toUserId))
+    ? await User.findById(Number(toUserId))
+    : await User.findOne({ userid: toUserId });
+
+  if (!targetUser) {
+    const error = new Error('Target user was not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (Number(targetUser.id) === Number(currentUser.id)) {
+    const error = new Error('Feedback cannot target yourself.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (teamId) {
+    const isTargetMember = await Team.isMember(teamId, targetUser.userid);
+    if (!isTargetMember) {
+      const error = new Error('Target user is not a member of this team.');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  return targetUser;
+};
+
 const normalizeRating = (rating) => {
   const parsed = Number(rating ?? 5);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
@@ -71,21 +106,11 @@ const createFeedback = async (req, res) => {
     const isTeamFeedback = Boolean(teamId);
     await assertTeamMember(teamId, currentUser);
 
-    // Team feedback is authored by the logged-in user and visible to the whole team.
-    // Keep toUserId populated for compatibility with the existing NOT NULL schema.
-    const targetUserId = isTeamFeedback ? currentUser.id : toUserId;
-
-    if (!targetUserId) {
-      return res.status(400).json({ error: 'Target user is required.' });
-    }
-
-    if (!isTeamFeedback && Number(targetUserId) === Number(currentUser.id)) {
-      return res.status(400).json({ error: 'Personal feedback cannot target yourself.' });
-    }
+    const targetUser = await getFeedbackTarget({ teamId, toUserId, currentUser });
 
     const feedback = await Feedback.create({
       fromUserId: currentUser.id,
-      toUserId: targetUserId,
+      toUserId: targetUser.id,
       teamId,
       content: trimmedContent,
       rating: normalizeRating(rating)

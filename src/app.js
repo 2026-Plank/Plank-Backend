@@ -30,6 +30,7 @@ app.use('/api/feedbacks', feedbackRoutes);
 // Keep legacy frontend endpoints working while pages are migrated to /api/auth.
 app.post('/login', authController.login);
 app.post('/sign', authController.sign);
+app.post('/signup', authController.sign);
 
 app.use((req, res, next) => {
   console.log('Request path:', req.originalUrl);

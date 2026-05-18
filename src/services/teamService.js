@@ -28,7 +28,7 @@ const normalizeTeam = (team) => {
   };
 };
 
-const createTeam = async ({ name, deadline, creatorName, creatorId, department = '' }) => {
+const createTeam = async ({ name, deadline, creatorName, creatorId, department = '', description = '' }) => {
   if (!name || !deadline) {
     const error = new Error('프로젝트 이름과 마감일을 입력해주세요.');
     error.statusCode = 400;
@@ -40,7 +40,7 @@ const createTeam = async ({ name, deadline, creatorName, creatorId, department =
     personnel: 1,
     teamCode: generateInviteCode(),
     dpNum: 1,
-    dpName: department || name,
+    dpName: String(description || '').trim() || department || name,
     dpLeader: creatorName || 'unknown',
     deadline
   });
@@ -67,9 +67,7 @@ const joinTeam = async (userid, inviteCode) => {
   // Check if user is already a member
   const alreadyMember = await Team.isMember(team.id, userid);
   if (alreadyMember) {
-    const error = new Error('You are already a member of this team');
-    error.statusCode = 400;
-    throw error;
+    return normalizeTeam(team);
   }
 
   // Add user to team
@@ -264,13 +262,9 @@ const updateMyDepartment = async (teamId, userId, department, jobDetail = '') =>
 
   const members = await Team.getMembers(teamId);
   const currentMember = members.find((member) => String(member.id) === String(userId));
-  if (currentMember?.role === 'Admin') {
-    return { department: '기획자', jobDetail: '프로젝트 리더', role: 'Admin' };
-  }
-
-  const role = `Member|${normalizedDepartment}|${String(jobDetail || '').trim()}`;
-  await Team.updateMemberRole(teamId, userId, role);
-  return { department: normalizedDepartment, jobDetail: String(jobDetail || '').trim(), role };
+  const normalizedJobDetail = String(jobDetail || '').trim();
+  const role = currentMember?.role === 'Admin' ? 'Admin' : 'User';
+  await Team.updateMemberDepartment(teamId, userId, normalizedDepartment, normalizedJobDetail, role);
+  return { department: normalizedDepartment, jobDetail: normalizedJobDetail, role };
 };
-
 module.exports = { createTeam, getTeams, joinTeam, getTeamMembers, getInvitableFriends, inviteFriendToTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService, updateMyDepartment };

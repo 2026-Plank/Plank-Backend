@@ -51,7 +51,10 @@ const { generateToken } = require('../utils/jwtHelper');
 
 // 회원가입
 exports.sign = async (req, res) => {
-  const { userId, pw, email, name } = req.body;
+  const userId = req.body.userId || req.body.userid || req.body.id;
+  const pw = req.body.pw || req.body.password;
+  const { email } = req.body;
+  const name = req.body.name || userId;
 
   // 1. 입력값 체크
   if (!userId || !pw || !email || !name) {
@@ -95,17 +98,20 @@ exports.sign = async (req, res) => {
 
 // 로그인
 exports.login = async (req, res) => {
-  const { userId, pw } = req.body;
+  const loginId = req.body.userId || req.body.userid || req.body.email;
+  const pw = req.body.pw || req.body.password;
 
-  if (!userId || !pw) {
+  if (!loginId || !pw) {
     return res.status(400).json({ message: "아이디/비밀번호 입력" });
   }
 
   try {
     // 1. 유저 조회
     const result = await execute(
-      `SELECT ID AS "id", USERID AS "userid", PASSWORD AS "password", NAME AS "name" FROM USERS WHERE USERID = :userId`,
-      { userId }
+      `SELECT ID AS "id", USERID AS "userid", EMAIL AS "email", PASSWORD AS "password", NAME AS "name"
+       FROM USERS
+       WHERE USERID = :loginId OR EMAIL = :loginId`,
+      { loginId }
     );
 
     if (result.rows.length === 0) {
@@ -130,6 +136,7 @@ exports.login = async (req, res) => {
       user: {
         id: user.id,
         userId: user.userid,
+        email: user.email,
         name: user.name || user.userid
       }
     });

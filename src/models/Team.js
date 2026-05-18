@@ -27,6 +27,25 @@ const parseMemberRole = (role = '') => {
   return { role: value, department, jobDetail };
 };
 
+const ensureColumn = async (columnName, definition) => {
+  const result = await execute(
+    `SELECT 1
+     FROM USER_TAB_COLUMNS
+     WHERE TABLE_NAME = 'TEAM_MEMBERS'
+       AND COLUMN_NAME = :columnName`,
+    { columnName }
+  );
+
+  if (result.rows.length === 0) {
+    await execute(`ALTER TABLE team_members ADD (${definition})`);
+  }
+};
+
+const ensureSchema = async () => {
+  await ensureColumn('DEPARTMENT', 'department VARCHAR2(50 CHAR)');
+  await ensureColumn('JOBDETAIL', 'jobdetail VARCHAR2(200 CHAR)');
+};
+
 const create = async ({ name, personnel, teamCode, dpNum, dpName, dpLeader, deadline }) => {
   const sql = `INSERT INTO teams (teamname, personnel, teamcode, dpnum, dpname, dpleader, deadline)
                VALUES (:name, :personnel, :teamCode, :dpNum, :dpName, :dpLeader, TO_DATE(:deadline, 'YYYY-MM-DD'))`;
@@ -134,7 +153,13 @@ const remove = async (id) => {
 };
 
 const getMembers = async (teamId) => {
-  const sql = `SELECT tm.userid AS "id", tm.role AS "role", u.name AS "name", u.email AS "email"
+  const sql = `SELECT tm.userid AS "id",
+                      tm.role AS "role",
+                      tm.department AS "department",
+                      tm.jobdetail AS "jobDetail",
+                      u.id AS "userPk",
+                      u.name AS "name",
+                      u.email AS "email"
                FROM team_members tm
                JOIN users u ON tm.userid = u.userid
                WHERE tm.teamid = :teamId
@@ -143,9 +168,12 @@ const getMembers = async (teamId) => {
   return result.rows.map((row) => ({
     id: row.id,
     role: row.role,
+    userPk: row.userPk,
     name: row.name,
     email: row.email,
-    ...parseMemberRole(row.role)
+    ...parseMemberRole(row.role),
+    department: row.department || parseMemberRole(row.role).department,
+    jobDetail: row.jobDetail || parseMemberRole(row.role).jobDetail
   }));
 };
 
@@ -157,4 +185,21 @@ const updateMemberRole = async (teamId, userId, role) => {
   await execute(`UPDATE team_members SET role = :role WHERE teamid = :teamId AND userid = :userId`, { teamId, userId, role });
 };
 
-module.exports = { create, findOne, findAll, getUserTeams, addMember, isMember, update, remove, getMembers, removeMember, updateMemberRole };
+const updateMemberDepartment = async (teamId, userId, department, jobDetail, role = 'User') => {
+  await execute(
+    `UPDATE team_members
+     SET role = :role,
+         department = :department,
+         jobdetail = :jobDetail
+     WHERE teamid = :teamId AND userid = :userId`,
+    {
+      teamId,
+      userId,
+      role,
+      department,
+      jobDetail
+    }
+  );
+};
+
+module.exports = { create, findOne, findAll, getUserTeams, addMember, isMember, update, remove, getMembers, removeMember, updateMemberRole, updateMemberDepartment, ensureSchema };
