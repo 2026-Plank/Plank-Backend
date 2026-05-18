@@ -48,6 +48,21 @@ const updateProfile = async (req, res) => {
   });
 };
 
+const updatePresence = async (req, res) => {
+  try {
+    const allowed = ['ONLINE', 'IDLE', 'DND', 'OFFLINE'];
+    const { presenceStatus } = req.body;
+    if (!allowed.includes(presenceStatus)) {
+      return res.status(400).json({ error: '올바른 상태값이 아닙니다.' });
+    }
+
+    const user = await User.findByIdAndUpdate(req.user.id, { presenceStatus });
+    res.json({ user: sanitizeUser(user) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 const getFriends = async (req, res) => {
   try {
     const friendships = await Friend.findAcceptedByUser(req.user.id);
@@ -200,6 +215,7 @@ const deleteFriend = async (req, res) => {
 module.exports = {
   getProfile,
   updateProfile,
+  updatePresence,
   getFriends,
   getFriendRequests,
   searchUsers,

@@ -15,12 +15,13 @@ const getCurrentUser = async (req) => {
 
 const createTeamController = async (req, res) => {
   try {
-    const { name, deadline, department } = req.body;
+    const { name, deadline, department, description } = req.body;
     const user = await getCurrentUser(req);
     const team = await createTeam({
       name,
       deadline,
       department,
+      description,
       creatorName: user?.name || user?.userid || 'unknown',
       creatorId: user.userid
     });

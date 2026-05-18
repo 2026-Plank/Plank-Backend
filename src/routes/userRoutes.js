@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getProfile,
   updateProfile,
+  updatePresence,
   getFriends,
   getFriendRequests,
   searchUsers,
@@ -14,6 +15,7 @@ const { verifyToken } = require('../middlewares/authMiddleware');
 
 router.get('/profile', verifyToken, getProfile);
 router.put('/profile', verifyToken, updateProfile);
+router.put('/presence', verifyToken, updatePresence);
 router.get('/search', verifyToken, searchUsers);
 router.get('/friends', verifyToken, getFriends);
 router.get('/friends/requests', verifyToken, getFriendRequests);
