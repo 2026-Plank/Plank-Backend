@@ -1,11 +1,12 @@
 const express = require('express');
-const authController = require('../controllers/authController');
-const { verifyToken } = require('../middlewares/authMiddleware');
-
 const router = express.Router();
+const authController = require('../controllers/authController');
 
-router.post('/signup', authController.signup);
+// 회원가입
+router.post('/sign', authController.sign);
+router.post('/signup', authController.sign);
+
+// 로그인
 router.post('/login', authController.login);
-router.get('/me', verifyToken, authController.getMe);
 
 module.exports = router;

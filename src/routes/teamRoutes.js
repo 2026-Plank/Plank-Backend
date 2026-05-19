@@ -1,17 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const { verifyToken, verifyAdmin } = require('../middlewares/authMiddleware');
-const { joinTeamRequest, getPendingMembers, approveMember } = require('../controllers/teamController');
+const { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember, updateTeamController, deleteTeamController, getTeamDetailsController, getInvitableFriendsController, inviteFriendController, removeMemberController, updateMemberRoleController, updateMyDepartmentController } = require('../controllers/teamController');
 
-// 1. 일반 사용자(팀원) 라우트
-// POST /api/team/join
+router.get('/', verifyToken, getTeamsController);
+router.post('/create', verifyToken, createTeamController);
 router.post('/join', verifyToken, joinTeamRequest);
-
-// 2. 관리자(ADMIN) 전용 라우트
-// GET /api/team/pending
 router.get('/pending', verifyToken, verifyAdmin, getPendingMembers);
-
-// PATCH /api/team/approve/:targetUserId
 router.patch('/approve/:targetUserId', verifyToken, verifyAdmin, approveMember);
+router.get('/:id', verifyToken, getTeamDetailsController);
+router.get('/:id/inviteable-friends', verifyToken, getInvitableFriendsController);
+router.post('/:id/invite', verifyToken, inviteFriendController);
+router.put('/:id', verifyToken, updateTeamController);
+router.delete('/:id', verifyToken, deleteTeamController);
+router.patch('/:id/members/me/department', verifyToken, updateMyDepartmentController);
+router.delete('/:id/members/:userId', verifyToken, removeMemberController);
+router.patch('/:id/members/:userId/role', verifyToken, updateMemberRoleController);
 
 module.exports = router;

@@ -1,15 +1,26 @@
 const express = require('express');
-const userController = require('../controllers/userController');
+const router = express.Router();
+const {
+  getProfile,
+  updateProfile,
+  updatePresence,
+  getFriends,
+  getFriendRequests,
+  searchUsers,
+  sendFriendRequest,
+  acceptFriendRequest,
+  deleteFriend
+} = require('../controllers/userController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 
-const router = express.Router();
-
-router.get('/search', verifyToken, userController.searchUsers);
-router.get('/friends', verifyToken, userController.getFriends);
-router.post('/friends/request', verifyToken, userController.sendFriendRequest);
-router.get('/friends/requests', verifyToken, userController.getFriendRequests);
-router.patch('/friends/requests/:requestId/accept', verifyToken, userController.acceptFriendRequest);
-router.delete('/friends/:friendId', verifyToken, userController.deleteFriend);
-router.get('/team-members', verifyToken, userController.getTeamMembers);
+router.get('/profile', verifyToken, getProfile);
+router.put('/profile', verifyToken, updateProfile);
+router.put('/presence', verifyToken, updatePresence);
+router.get('/search', verifyToken, searchUsers);
+router.get('/friends', verifyToken, getFriends);
+router.get('/friends/requests', verifyToken, getFriendRequests);
+router.post('/friends', verifyToken, sendFriendRequest);
+router.put('/friends/:relationId/accept', verifyToken, acceptFriendRequest);
+router.delete('/friends/:relationId', verifyToken, deleteFriend);
 
 module.exports = router;

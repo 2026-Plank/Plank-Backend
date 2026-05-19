@@ -1,113 +1,176 @@
 const Feedback = require('../models/Feedback');
+const Team = require('../models/Team');
 const User = require('../models/User');
 
-const VALID_TYPES = ['PERSONAL', 'TEAM'];
+const sanitizeUser = (user) => {
+  if (!user) return null;
+  const cloned = { ...user };
+  delete cloned.password;
+  return cloned;
+};
 
-exports.createFeedback = async (req, res, next) => {
+const getCurrentUser = async (req) => {
+  const user = req.user?.id
+    ? await User.findById(req.user.id)
+    : await User.findOne({ userid: req.user?.userId });
+  if (!user) {
+    const error = new Error('Authenticated user was not found.');
+    error.statusCode = 401;
+    throw error;
+  }
+  return user;
+};
+
+const assertTeamMember = async (teamId, user) => {
+  if (!teamId) return;
+
+  const isMember = await Team.isMember(teamId, user.userid);
+  if (!isMember) {
+    const error = new Error('You do not have permission to use feedback for this team.');
+    error.statusCode = 403;
+    throw error;
+  }
+};
+
+const getFeedbackTarget = async ({ teamId, toUserId, currentUser }) => {
+  if (!toUserId) {
+    const error = new Error('Target user is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const targetUser = Number.isFinite(Number(toUserId))
+    ? await User.findById(Number(toUserId))
+    : await User.findOne({ userid: toUserId });
+
+  if (!targetUser) {
+    const error = new Error('Target user was not found.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (Number(targetUser.id) === Number(currentUser.id)) {
+    const error = new Error('Feedback cannot target yourself.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (teamId) {
+    const isTargetMember = await Team.isMember(teamId, targetUser.userid);
+    if (!isTargetMember) {
+      const error = new Error('Target user is not a member of this team.');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  return targetUser;
+};
+
+const normalizeRating = (rating) => {
+  const parsed = Number(rating ?? 5);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
+    const error = new Error('Rating must be an integer from 1 to 5.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return parsed;
+};
+
+const mapFeedbackWithUsers = async (feedbacks) => {
+  return Promise.all(
+    feedbacks.map(async (feedback) => {
+      const fromUser = await User.findById(feedback.fromUserId);
+      const toUser = await User.findById(feedback.toUserId);
+
+      return {
+        ...feedback,
+        fromUser: sanitizeUser(fromUser),
+        toUser: sanitizeUser(toUser),
+        audience: feedback.teamId ? 'team' : 'personal'
+      };
+    })
+  );
+};
+
+const createFeedback = async (req, res) => {
   try {
-    const { targetUserId, type, content, score } = req.body;
+    const { toUserId, teamId, content, rating } = req.body;
+    const trimmedContent = content?.trim();
 
-    if (!targetUserId || !type || !content) {
-      return res.status(400).json({ message: 'targetUserId, type, content는 필수입니다.' });
+    if (!trimmedContent) {
+      return res.status(400).json({ error: 'Feedback content is required.' });
     }
 
-    if (!VALID_TYPES.includes(type)) {
-      return res.status(400).json({ message: 'type은 PERSONAL 또는 TEAM 이어야 합니다.' });
-    }
+    const currentUser = await getCurrentUser(req);
+    const isTeamFeedback = Boolean(teamId);
+    await assertTeamMember(teamId, currentUser);
 
-    const targetUser = await User.findById(targetUserId);
-    if (!targetUser) {
-      return res.status(404).json({ message: '피드백 대상 사용자를 찾을 수 없습니다.' });
-    }
+    const targetUser = await getFeedbackTarget({ teamId, toUserId, currentUser });
 
-    if (Number(targetUserId) === Number(req.user.userId)) {
-      return res.status(400).json({ message: '자기 자신에게 피드백을 작성할 수 없습니다.' });
-    }
-
-    let teamId = null;
-    if (type === 'TEAM') {
-      if (!req.user.teamId) {
-        return res.status(400).json({ message: '팀 피드백은 팀 소속 사용자만 작성할 수 있습니다.' });
-      }
-
-      const sameTeam = await User.belongsToSameTeam(targetUserId, req.user.teamId);
-      if (!sameTeam) {
-        return res.status(403).json({ message: '같은 팀원에게만 팀 피드백을 작성할 수 있습니다.' });
-      }
-
-      teamId = req.user.teamId;
-    }
-
-    await Feedback.create({
-      authorId: req.user.userId,
-      targetUserId,
+    const feedback = await Feedback.create({
+      fromUserId: currentUser.id,
+      toUserId: targetUser.id,
       teamId,
-      type,
-      content,
-      score: score ?? null
+      content: trimmedContent,
+      rating: normalizeRating(rating)
     });
 
-    res.status(201).json({ message: '피드백이 등록되었습니다.' });
+    const [mappedFeedback] = await mapFeedbackWithUsers([feedback]);
+    res.status(201).json({ message: 'Feedback created', feedback: mappedFeedback });
   } catch (error) {
-    next(error);
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
-exports.getFeedbacks = async (req, res, next) => {
+const getFeedbacks = async (req, res) => {
   try {
-    const type = req.query.type || null;
-    const feedbacks = await Feedback.findReceivedByUserId({
-      userId: req.params.targetId,
-      type
-    });
-
-    res.status(200).json(feedbacks);
+    const { userId } = req.params;
+    const feedbacks = await Feedback.find({ toUserId: userId });
+    res.json({ feedbacks: await mapFeedbackWithUsers(feedbacks) });
   } catch (error) {
-    next(error);
+    res.status(500).json({ error: error.message });
   }
 };
 
-exports.getMyReceivedFeedbacks = async (req, res, next) => {
+const getMyReceivedFeedbacks = async (req, res) => {
   try {
-    const type = req.query.type || null;
-    const feedbacks = await Feedback.findReceivedByUserId({
-      userId: req.user.userId,
-      type
-    });
-
-    res.status(200).json(feedbacks);
+    const currentUser = await getCurrentUser(req);
+    const feedbacks = await Feedback.find({ toUserId: currentUser.id });
+    res.json({ feedbacks: await mapFeedbackWithUsers(feedbacks) });
   } catch (error) {
-    next(error);
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
-exports.getMySentFeedbacks = async (req, res, next) => {
+const getMySentFeedbacks = async (req, res) => {
   try {
-    const type = req.query.type || null;
-    const feedbacks = await Feedback.findCreatedByUserId({
-      userId: req.user.userId,
-      type
-    });
-
-    res.status(200).json(feedbacks);
+    const currentUser = await getCurrentUser(req);
+    const feedbacks = await Feedback.find({ fromUserId: currentUser.id });
+    res.json({ feedbacks: await mapFeedbackWithUsers(feedbacks) });
   } catch (error) {
-    next(error);
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
-exports.deleteFeedback = async (req, res, next) => {
+const getTeamFeedbacks = async (req, res) => {
   try {
-    const result = await Feedback.deleteByIdAndAuthor({
-      feedbackId: req.params.feedbackId,
-      authorId: req.user.userId
-    });
+    const { teamId } = req.params;
+    const currentUser = await getCurrentUser(req);
 
-    if (!result.affectedRows) {
-      return res.status(404).json({ message: '삭제할 피드백을 찾을 수 없습니다.' });
-    }
+    await assertTeamMember(teamId, currentUser);
 
-    res.status(200).json({ message: '피드백을 삭제했습니다.' });
+    const feedbacks = await Feedback.findByTeamId(teamId);
+    res.json({ feedbacks: await mapFeedbackWithUsers(feedbacks) });
   } catch (error) {
-    next(error);
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
+};
+
+module.exports = {
+  createFeedback,
+  getFeedbacks,
+  getMyReceivedFeedbacks,
+  getMySentFeedbacks,
+  getTeamFeedbacks
 };

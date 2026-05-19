@@ -1,26 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const scheduleController = require('../controllers/scheduleController');
-const { verifyToken } = require('../middlewares/authMiddleware');
+const { addSchedule, getSchedules, updateScheduleById, deleteScheduleById } = require('../controllers/scheduleController');
 
-router.get('/schedules', verifyToken, scheduleController.getSchedules);
-router.post('/schedules', verifyToken, scheduleController.addSchedule);
-router.patch('/schedules/:scheduleId', verifyToken, (req, res, next) => {
-  req.body.scheduleId = req.params.scheduleId;
-  next();
-}, scheduleController.updateSchedule);
-router.delete('/schedules/:scheduleId', verifyToken, (req, res, next) => {
-  req.body.scheduleId = req.params.scheduleId;
-  next();
-}, scheduleController.deleteSchedule);
-
-// 일정 추가 (POST /schedule) [cite: 144-146]
-router.post('/schedule', verifyToken, scheduleController.addSchedule);
-
-// 일정 수정 (POST /schedule-update) [cite: 148]
-router.post('/schedule-update', verifyToken, scheduleController.updateSchedule);
-
-// 일정 삭제 (DELETE /schedule-delete) [cite: 148]
-router.delete('/schedule-delete', verifyToken, scheduleController.deleteSchedule);
+router.post('/', addSchedule);
+router.get('/', getSchedules);
+router.get('/:teamId', getSchedules);
+router.put('/:id', updateScheduleById);
+router.delete('/:id', deleteScheduleById);
 
 module.exports = router;

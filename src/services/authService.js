@@ -1,61 +1,61 @@
 const bcrypt = require('bcrypt');
 const User = require('../models/User');
-const { createToken } = require('../utils/jwtHelper');
+const { generateToken } = require('../utils/jwtHelper');
 
-const sanitizeUser = (user) => ({
-  id: user.id,
-  email: user.email,
-  name: user.name,
-  teamId: user.teamId,
-  role: user.role,
-  status: user.status,
-  createdAt: user.createdAt
-});
+const normalizeUser = (user) => {
+  if (!user) return null;
+  return {
+    id: user.id,
+    userid: user.userid,
+    email: user.email,
+    name: user.name,
+    profile: user.profile
+  };
+};
 
-const signup = async ({ email, password, name }) => {
-  const existingUser = await User.findByEmail(email);
+const register = async ({ userid, email, password, name }) => {
+  console.log('[AUTH-SVC] register() called with:', { userid, email, password: password ? '***' : 'undefined', name });
+  if (!userid || !email || !password) {
+    const error = new Error('이메일, 아이디, 비밀번호를 모두 입력해주세요.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const existingUser = await User.findByEmailOrUserid({ email, userid });
   if (existingUser) {
-    const error = new Error('이미 가입된 이메일입니다.');
-    error.status = 409;
+    const duplicatedField = existingUser.email === email ? '이메일' : '아이디';
+    const error = new Error(`이미 사용 중인 ${duplicatedField}입니다.`);
+    error.statusCode = 409;
     throw error;
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  const user = await User.create({
-    email,
-    password: hashedPassword,
-    name
-  });
-
-  return {
-    token: createToken(user),
-    user: sanitizeUser(user)
-  };
+  console.log('[AUTH-SVC] Password hashed');
+  const userIdValue = userid || email;
+  const displayName = name || userIdValue;
+  console.log('[AUTH-SVC] Creating user with userid:', userIdValue);
+  const user = await User.create({ userid: userIdValue, email, password: hashedPassword, name: displayName });
+  console.log('[AUTH-SVC] User created:', user);
+  return normalizeUser(user);
 };
 
-const login = async ({ email, password }) => {
-  const user = await User.findByEmail(email);
-  if (!user) {
-    const error = new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
-    error.status = 401;
-    throw error;
+const login = async (loginId, password) => {
+  console.log('[AUTH-SVC] login() called with loginId:', loginId);
+  const rawUser = await User.findByLoginId(loginId);
+  console.log('[AUTH-SVC] User found:', rawUser ? `${rawUser.userid}` : 'null');
+  if (!rawUser || !(await bcrypt.compare(password, rawUser.password))) {
+    console.log('[AUTH-SVC] Credentials invalid');
+    throw new Error('Invalid credentials');
   }
-
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) {
-    const error = new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
-    error.status = 401;
-    throw error;
-  }
-
-  return {
-    token: createToken(user),
-    user: sanitizeUser(user)
-  };
+  console.log('[AUTH-SVC] Credentials valid, generating token');
+  const user = normalizeUser(rawUser);
+  const token = generateToken({ id: user.id });
+  return { user, token };
 };
 
-module.exports = {
-  signup,
-  login,
-  sanitizeUser
+const approveUser = async (userId) => {
+  const user = await User.findByIdAndUpdate(userId, { status: 'APPROVED' });
+  return normalizeUser(user);
 };
+
+module.exports = { register, login, approveUser };
