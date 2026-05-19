@@ -1,3 +1,32 @@
+<<<<<<< HEAD
+const db = require('../config/db.config');
+
+const Team = {
+  findByInviteCode: async (inviteCode) => {
+    const query = `
+      SELECT id, name, inviteCode, adminId, createdAt
+      FROM teams
+      WHERE inviteCode = ?
+      LIMIT 1
+    `;
+    const [rows] = await db.execute(query, [inviteCode]);
+    return rows[0] || null;
+  },
+
+  findById: async (id) => {
+    const query = `
+      SELECT id, name, inviteCode, adminId, createdAt
+      FROM teams
+      WHERE id = ?
+      LIMIT 1
+    `;
+    const [rows] = await db.execute(query, [id]);
+    return rows[0] || null;
+  }
+};
+
+module.exports = Team;
+=======
 const { execute } = require('../config/db.config');
 
 const mapRow = (row) => {
@@ -203,3 +232,4 @@ const updateMemberDepartment = async (teamId, userId, department, jobDetail, rol
 };
 
 module.exports = { create, findOne, findAll, getUserTeams, addMember, isMember, update, remove, getMembers, removeMember, updateMemberRole, updateMemberDepartment, ensureSchema };
+>>>>>>> 6b0dad0c16077e3674c3d16d79957895695a9153
