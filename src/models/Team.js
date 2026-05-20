@@ -1,32 +1,3 @@
-<<<<<<< HEAD
-const db = require('../config/db.config');
-
-const Team = {
-  findByInviteCode: async (inviteCode) => {
-    const query = `
-      SELECT id, name, inviteCode, adminId, createdAt
-      FROM teams
-      WHERE inviteCode = ?
-      LIMIT 1
-    `;
-    const [rows] = await db.execute(query, [inviteCode]);
-    return rows[0] || null;
-  },
-
-  findById: async (id) => {
-    const query = `
-      SELECT id, name, inviteCode, adminId, createdAt
-      FROM teams
-      WHERE id = ?
-      LIMIT 1
-    `;
-    const [rows] = await db.execute(query, [id]);
-    return rows[0] || null;
-  }
-};
-
-module.exports = Team;
-=======
 const { execute } = require('../config/db.config');
 
 const mapRow = (row) => {
@@ -47,7 +18,7 @@ const mapRow = (row) => {
 const parseMemberRole = (role = '') => {
   const value = String(role || '');
   if (value === 'Admin') {
-    return { role: value, department: '기획자', jobDetail: '프로젝트 리더' };
+    return { role: value, department: 'Planning', jobDetail: 'Project leader' };
   }
   if (!value.startsWith('Member|')) {
     return { role: value || 'User', department: '', jobDetail: '' };
@@ -175,9 +146,7 @@ const update = async (id, updates) => {
 };
 
 const remove = async (id) => {
-  // First remove all team members
   await execute(`DELETE FROM team_members WHERE teamid = :id`, { id });
-  // Then remove the team
   await execute(`DELETE FROM teams WHERE id = :id`, { id });
 };
 
@@ -194,16 +163,19 @@ const getMembers = async (teamId) => {
                WHERE tm.teamid = :teamId
                ORDER BY tm.role DESC, u.name`;
   const result = await execute(sql, { teamId });
-  return result.rows.map((row) => ({
-    id: row.id,
-    role: row.role,
-    userPk: row.userPk,
-    name: row.name,
-    email: row.email,
-    ...parseMemberRole(row.role),
-    department: row.department || parseMemberRole(row.role).department,
-    jobDetail: row.jobDetail || parseMemberRole(row.role).jobDetail
-  }));
+  return result.rows.map((row) => {
+    const parsedRole = parseMemberRole(row.role);
+    return {
+      id: row.id,
+      role: row.role,
+      userPk: row.userPk,
+      name: row.name,
+      email: row.email,
+      ...parsedRole,
+      department: row.department || parsedRole.department,
+      jobDetail: row.jobDetail || parsedRole.jobDetail
+    };
+  });
 };
 
 const removeMember = async (teamId, userId) => {
@@ -232,4 +204,3 @@ const updateMemberDepartment = async (teamId, userId, department, jobDetail, rol
 };
 
 module.exports = { create, findOne, findAll, getUserTeams, addMember, isMember, update, remove, getMembers, removeMember, updateMemberRole, updateMemberDepartment, ensureSchema };
->>>>>>> 6b0dad0c16077e3674c3d16d79957895695a9153
