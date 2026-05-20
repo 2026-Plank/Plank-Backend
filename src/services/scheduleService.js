@@ -1,4 +1,5 @@
 const Schedule = require('../models/Schedule');
+const Team = require('../models/Team');
 const formatDate = (value) => {
   if (!value) return null;
   const date = new Date(value);
@@ -25,6 +26,15 @@ const normalizeSchedule = (schedule) => {
   };
 };
 
+const normalizeTeamId = async (teamId) => {
+  if (teamId === '' || teamId === undefined || teamId === null) {
+    return null;
+  }
+
+  const team = await Team.findOne({ id: teamId });
+  return team ? team.id : null;
+};
+
 const createSchedule = async ({ teamId, type, title, description, dpName, targetDate }) => {
    if (!title || !targetDate) {
     const error = new Error('일정명과 날짜는 필수입니다.');
@@ -33,7 +43,7 @@ const createSchedule = async ({ teamId, type, title, description, dpName, target
   }
 
   const schedule = await Schedule.create({
-    teamId,
+    teamId: await normalizeTeamId(teamId),
     type: type || 'Task',
     title,
     description: description || '',
