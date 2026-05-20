@@ -6,7 +6,7 @@ const verifyToken = (req, res, next) => {
     if (!token) return res.status(401).json({ message: "인증 토큰이 없습니다." });
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'plank_secret_key');
+        const decoded = verifyJwt(token);
         req.user = {
             ...decoded,
             id: decoded.id || decoded.userPk || decoded.user_id,
