@@ -1,7 +1,23 @@
 const { execute } = require('../config/db.config');
 
-const ensureTable = async () => {
-  try {
+const rowSelect = `
+  id AS "id",
+  userId AS "userId",
+  friendId AS "friendId",
+  status AS "status",
+  createdAt AS "createdAt"
+`;
+
+const buildWhere = (filter = {}) => {
+  const keys = Object.keys(filter).filter((key) => filter[key] !== undefined && filter[key] !== null);
+  return {
+    clause: keys.length ? `WHERE ${keys.map((key) => `${key} = :${key}`).join(' AND ')}` : '',
+    binds: keys.reduce((binds, key) => ({ ...binds, [key]: filter[key] }), {})
+  };
+};
+
+const Friend = {
+  ensureTable: async () => {
     await execute(`
       BEGIN
         EXECUTE IMMEDIATE '
@@ -11,6 +27,7 @@ const ensureTable = async () => {
             friendId NUMBER NOT NULL,
             status VARCHAR2(20 CHAR) DEFAULT ''pending'' NOT NULL,
             createdAt DATE DEFAULT SYSDATE NOT NULL,
+            CONSTRAINT chk_friends_status CHECK (status IN (''pending'', ''accepted'')),
             CONSTRAINT uq_friends_pair UNIQUE (userId, friendId)
           )
         ';
@@ -24,7 +41,7 @@ const ensureTable = async () => {
   },
 
   create: async ({ userId, friendId }) => {
-    await db.execute(
+    await execute(
       `INSERT INTO friends (userId, friendId, status, createdAt)
        VALUES (:userId, :friendId, 'pending', SYSDATE)`,
       { userId, friendId }
@@ -36,12 +53,12 @@ const ensureTable = async () => {
 
   find: async (filter = {}) => {
     const { clause, binds } = buildWhere(filter);
-    const result = await db.execute(`SELECT ${rowSelect} FROM friends ${clause} ORDER BY createdAt DESC`, binds);
+    const result = await execute(`SELECT ${rowSelect} FROM friends ${clause} ORDER BY createdAt DESC`, binds);
     return result.rows;
   },
 
   findPair: async (userId, friendId) => {
-    const result = await db.execute(
+    const result = await execute(
       `SELECT ${rowSelect}
        FROM friends
        WHERE (userId = :userId AND friendId = :friendId)
@@ -55,7 +72,7 @@ const ensureTable = async () => {
   findRelationshipBetweenUsers: async (userId, otherUserId) => Friend.findPair(userId, otherUserId),
 
   findIncomingPending: async (friendId) => {
-    const result = await db.execute(
+    const result = await execute(
       `SELECT ${rowSelect}
        FROM friends
        WHERE friendId = :friendId AND status = 'pending'
@@ -68,7 +85,7 @@ const ensureTable = async () => {
   findIncomingRequests: async (userId) => Friend.findIncomingPending(userId),
 
   findAcceptedByUser: async (userId) => {
-    const result = await db.execute(
+    const result = await execute(
       `SELECT ${rowSelect}
        FROM friends
        WHERE (userId = :userId OR friendId = :userId) AND status = 'accepted'
@@ -84,13 +101,13 @@ const ensureTable = async () => {
   },
 
   updateStatus: async (id, status) => {
-    await db.execute(`UPDATE friends SET status = :status WHERE id = :id`, { id, status });
+    await execute(`UPDATE friends SET status = :status WHERE id = :id`, { id, status });
     const rows = await Friend.find({ id });
     return rows[0] || null;
   },
 
   acceptRequest: async ({ requestId, userId }) => {
-    await db.execute(
+    await execute(
       `UPDATE friends SET status = 'accepted' WHERE id = :requestId AND friendId = :userId AND status = 'pending'`,
       { requestId, userId }
     );
@@ -99,11 +116,11 @@ const ensureTable = async () => {
   },
 
   deleteById: async (id) => {
-    await db.execute(`DELETE FROM friends WHERE id = :id`, { id });
+    await execute(`DELETE FROM friends WHERE id = :id`, { id });
   },
 
   deleteRelationship: async ({ userId, friendId }) => {
-    await db.execute(
+    await execute(
       `DELETE FROM friends
        WHERE (userId = :userId AND friendId = :friendId)
           OR (userId = :friendId AND friendId = :userId)`,
@@ -112,56 +129,4 @@ const ensureTable = async () => {
   }
 };
 
-const create = async ({ userId, friendId }) => {
-  const sql = `INSERT INTO friends (userId, friendId, status, createdAt) VALUES (:userId, :friendId, 'pending', SYSDATE)`;
-  await execute(sql, { userId, friendId });
-  const rows = await find({ userId, friendId });
-  return rows[0] || null;
-};
-
-const find = async (filter) => {
-  const keys = Object.keys(filter || {});
-  const clause = keys.length ? `WHERE ${keys.map((key) => `${key} = :${key}`).join(' AND ')}` : '';
-  const sql = `SELECT id AS "id", userId AS "userId", friendId AS "friendId", status AS "status", createdAt AS "createdAt" FROM friends ${clause}`;
-  const result = await execute(sql, filter);
-  return result.rows;
-};
-
-const findPair = async (userId, friendId) => {
-  const sql = `SELECT id AS "id", userId AS "userId", friendId AS "friendId", status AS "status", createdAt AS "createdAt"
-               FROM friends
-               WHERE (userId = :userId AND friendId = :friendId)
-                  OR (userId = :friendId AND friendId = :userId)`;
-  const result = await execute(sql, { userId, friendId });
-  return result.rows[0] || null;
-};
-
-const findIncomingPending = async (friendId) => {
-  const sql = `SELECT id AS "id", userId AS "userId", friendId AS "friendId", status AS "status", createdAt AS "createdAt"
-               FROM friends
-               WHERE friendId = :friendId AND status = 'pending'
-               ORDER BY createdAt DESC`;
-  const result = await execute(sql, { friendId });
-  return result.rows;
-};
-
-const findAcceptedByUser = async (userId) => {
-  const sql = `SELECT id AS "id", userId AS "userId", friendId AS "friendId", status AS "status", createdAt AS "createdAt"
-               FROM friends
-               WHERE (userId = :userId OR friendId = :userId) AND status = 'accepted'
-               ORDER BY createdAt DESC`;
-  const result = await execute(sql, { userId });
-  return result.rows;
-};
-
-const updateStatus = async (id, status) => {
-  await execute(`UPDATE friends SET status = :status WHERE id = :id`, { id, status });
-  const rows = await find({ id });
-  return rows[0] || null;
-};
-
-const deleteById = async (id) => {
-  await execute(`DELETE FROM friends WHERE id = :id`, { id });
-};
-
-module.exports = { ensureTable, create, find, findPair, findIncomingPending, findAcceptedByUser, updateStatus, deleteById };
+module.exports = Friend;
