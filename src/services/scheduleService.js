@@ -1,18 +1,20 @@
 const Schedule = require('../models/Schedule');
+const Team = require('../models/Team');
 const formatDate = (value) => {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-   const year = date.getFullYear();
+  const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
+};
 
 const normalizeSchedule = (schedule) => {
   if (!schedule) return null;
   return {
     id: schedule.id,
+    userId: schedule.userId,
     teamId: schedule.teamId,
     type: schedule.type,
     title: schedule.title,
@@ -25,6 +27,15 @@ const normalizeSchedule = (schedule) => {
   };
 };
 
+const normalizeTeamId = async (teamId) => {
+  if (teamId === '' || teamId === undefined || teamId === null) {
+    return null;
+  }
+
+  const team = await Team.findOne({ id: teamId });
+  return team ? team.id : null;
+};
+
 const createSchedule = async ({ teamId, type, title, description, dpName, targetDate }) => {
    if (!title || !targetDate) {
     const error = new Error('일정명과 날짜는 필수입니다.');
@@ -33,7 +44,7 @@ const createSchedule = async ({ teamId, type, title, description, dpName, target
   }
 
   const schedule = await Schedule.create({
-    teamId,
+    teamId: await normalizeTeamId(teamId),
     type: type || 'Task',
     title,
     description: description || '',
@@ -44,13 +55,34 @@ const createSchedule = async ({ teamId, type, title, description, dpName, target
   return normalizeSchedule(schedule);
 };
 
-const getTeamSchedules = async (teamId) => {
-  const schedules = teamId ? await Schedule.findByTeamId(teamId) : await Schedule.findAll();
- return schedules.map(normalizeSchedule);
+const getTeamSchedules = async ({ userId, teamId }) => {
+  if (!userId) {
+    const error = new Error('로그인이 필요합니다.');
+    error.statusCode = 401;
+    throw error;
+  }
+  const schedules = teamId
+    ? await Schedule.findByTeamId(teamId, userId)
+    : await Schedule.findAll(userId);
+
+  const normalized = schedules.map(normalizeSchedule);
+
+  const teamCache = {};
+  for (const item of normalized) {
+    if (item.type === 'ProjectTodo' && item.teamId && !item.dpName) {
+      if (!teamCache[item.teamId]) {
+        teamCache[item.teamId] = await Team.findOne({ id: item.teamId });
+      }
+      item.dpName = teamCache[item.teamId]?.name || '';
+    }
+  }
+
+  return normalized;
 };
 
-const updateSchedule = async (id, updates) => {
+const updateSchedule = async ({ id, userId, updates }) => {
   const allowedFields = ['type', 'title', 'description', 'dpName', 'targetDate', 'status'];
+  const allowedStatuses = ['Wait', 'Progress', 'Done'];
   const filteredUpdates = Object.fromEntries(
     Object.entries(updates || {}).filter(([key, value]) => allowedFields.includes(key) && value !== undefined)
   );
@@ -61,7 +93,17 @@ const updateSchedule = async (id, updates) => {
     throw error;
   }
 
-  const schedule = await Schedule.findByIdAndUpdate(id, filteredUpdates);
+  if (filteredUpdates.status && !allowedStatuses.includes(filteredUpdates.status)) {
+    const error = new Error('올바르지 않은 일정 상태입니다.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (filteredUpdates.type) {
+    filteredUpdates.type = normalizeType(filteredUpdates.type);
+  }
+
+  const schedule = await Schedule.findByIdAndUpdate(id, userId, filteredUpdates);
   if (!schedule) {
     const error = new Error('일정을 찾을 수 없습니다.');
     error.statusCode = 404;
@@ -70,13 +112,13 @@ const updateSchedule = async (id, updates) => {
   return normalizeSchedule(schedule);
 };
 
-const deleteSchedule = async (id) => {
+const deleteSchedule = async ({ id, userId }) => {
   if (!id) {
     const error = new Error('삭제할 일정 id가 필요합니다.');
     error.statusCode = 400;
     throw error;
   }
-  await Schedule.deleteById(id);
+  await Schedule.deleteById(id, userId);
 };
 
 module.exports = { createSchedule, getTeamSchedules, updateSchedule, deleteSchedule };
