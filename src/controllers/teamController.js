@@ -1,4 +1,4 @@
-const { createTeam, getTeams, joinTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService, inviteFriendToTeam, getInvitableFriends, updateMyDepartment } = require('../services/teamService');
+const { createTeam, getTeams, joinTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService, inviteFriendToTeam, getInvitableFriends, updateMyDepartment, getProjectTodos, createProjectTodo, toggleProjectTodo, deleteProjectTodo } = require('../services/teamService');
 const User = require('../models/User');
 
 const getCurrentUser = async (req) => {
@@ -152,4 +152,50 @@ const updateMyDepartmentController = async (req, res) => {
   }
 };
 
-module.exports = { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember, updateTeamController, deleteTeamController, getTeamDetailsController, getInvitableFriendsController, inviteFriendController, removeMemberController, updateMemberRoleController, updateMyDepartmentController };
+const getProjectTodosController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await getCurrentUser(req);
+    const todos = await getProjectTodos(id, user.userid);
+    res.json({ todos });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+const createProjectTodoController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title } = req.body;
+    const user = await getCurrentUser(req);
+    const todo = await createProjectTodo(id, user.userid, title);
+    res.status(201).json({ todo });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+const toggleProjectTodoController = async (req, res) => {
+  try {
+    const { id, todoId } = req.params;
+    const { status } = req.body;
+    const user = await getCurrentUser(req);
+    const todo = await toggleProjectTodo(id, todoId, user.userid, status);
+    res.json({ todo });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+const deleteProjectTodoController = async (req, res) => {
+  try {
+    const { id, todoId } = req.params;
+    const user = await getCurrentUser(req);
+    await deleteProjectTodo(id, todoId, user.userid);
+    res.json({ message: 'Todo deleted' });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+};
+
+module.exports = { createTeamController, getTeamsController, joinTeamRequest, getPendingMembers, approveMember, updateTeamController, deleteTeamController, getTeamDetailsController, getInvitableFriendsController, inviteFriendController, removeMemberController, updateMemberRoleController, updateMyDepartmentController, getProjectTodosController, createProjectTodoController, toggleProjectTodoController, deleteProjectTodoController };
