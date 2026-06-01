@@ -91,7 +91,10 @@ const sendMessage = async (req, res) => {
     await Notification.create({
       userId: receiverId,
       type: 'chat',
-      message: `${currentUser.name || currentUser.userid}\uB2D8\uC774 \uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0C8\uC2B5\uB2C8\uB2E4.`
+      message: `${currentUser.name || currentUser.userid}\uB2D8\uC774 \uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0C8\uC2B5\uB2C8\uB2E4.`,
+      targetType: 'direct_chat',
+      targetId: String(currentUser.id),
+      actionPath: '/chat'
     });
     res.status(201).json({ message: 'Message sent', chat });
   } catch (error) {
@@ -190,7 +193,10 @@ const sendGroupMessage = async (req, res) => {
       .map((userId) => Notification.create({
         userId,
         type: 'chat',
-        message: `${currentUser.name || currentUser.userid}\uB2D8\uC774 \uADF8\uB8F9 \uCC44\uD305\uC5D0 \uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0C8\uC2B5\uB2C8\uB2E4.`
+        message: `${currentUser.name || currentUser.userid}\uB2D8\uC774 \uADF8\uB8F9 \uCC44\uD305\uC5D0 \uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0C8\uC2B5\uB2C8\uB2E4.`,
+        targetType: 'group_chat',
+        targetId: String(groupId),
+        actionPath: '/chat'
       })));
     res.status(201).json({ message: 'Message sent', chat });
   } catch (error) {

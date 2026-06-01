@@ -12,7 +12,7 @@ const startServer = async (app) => {
 
   try {
     await connectDB();
-    await User.ensurePresenceColumn();
+    await User.ensureProfileColumns();
     await Team.ensureSchema();
     await Friend.ensureTable();
     await Feedback.ensureTable();

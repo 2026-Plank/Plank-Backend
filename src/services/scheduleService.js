@@ -27,6 +27,11 @@ const normalizeSchedule = (schedule) => {
   };
 };
 
+const normalizeType = (type) => {
+  const normalized = String(type || 'Task').trim();
+  return normalized || 'Task';
+};
+
 const normalizeTeamId = async (teamId) => {
   if (teamId === '' || teamId === undefined || teamId === null) {
     return null;
@@ -36,7 +41,7 @@ const normalizeTeamId = async (teamId) => {
   return team ? team.id : null;
 };
 
-const createSchedule = async ({ teamId, type, title, description, dpName, targetDate }) => {
+const createSchedule = async ({ userId, teamId, type, title, description, dpName, targetDate }) => {
    if (!title || !targetDate) {
     const error = new Error('일정명과 날짜는 필수입니다.');
     error.statusCode = 400;
@@ -44,8 +49,9 @@ const createSchedule = async ({ teamId, type, title, description, dpName, target
   }
 
   const schedule = await Schedule.create({
+    userId,
     teamId: await normalizeTeamId(teamId),
-    type: type || 'Task',
+    type: normalizeType(type),
     title,
     description: description || '',
     dpName: dpName || '기본 프로젝트',

@@ -3,7 +3,7 @@ const { createSchedule, getTeamSchedules, updateSchedule, deleteSchedule } = req
 const addSchedule = async (req, res) => {
   try {
     const { teamId, type, title, description, dpName, targetDate } = req.body;
-    const schedule = await createSchedule({ teamId, type, title, description, dpName, targetDate });
+    const schedule = await createSchedule({ userId: req.user.id, teamId, type, title, description, dpName, targetDate });
     res.status(201).json({ message: 'Schedule created', scheduleId: schedule.id, schedule });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });
@@ -25,7 +25,7 @@ const updateScheduleById = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    const schedule = await updateSchedule(id, updates);
+    const schedule = await updateSchedule({ id, userId: req.user.id, updates });
     res.json({ message: 'Schedule updated', scheduleId: schedule.id, schedule });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });
