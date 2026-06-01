@@ -1,144 +1,231 @@
 const Chat = require('../models/Chat');
+const Friend = require('../models/Friend');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
+
+const getCurrentUser = async (req) => {
+  const user = req.user?.id
+    ? await User.findById(req.user.id)
+    : await User.findOne({ userid: req.user?.userId });
+
+  if (!user) {
+    const error = new Error('로그인 사용자를 찾을 수 없습니다. 다시 로그인해주세요.');
+    error.statusCode = 401;
+    throw error;
+  }
+
+  return user;
+};
+
+const assertAcceptedFriend = async (userId, friendId) => {
+  const relation = await Friend.findPair(userId, friendId);
+  if (!relation || String(relation.status).toLowerCase() !== 'accepted') {
+    const error = new Error('친구끼리만 1:1 채팅을 할 수 있습니다.');
+    error.statusCode = 403;
+    throw error;
+  }
+};
+
+const getAcceptedFriendIdSet = async (userId) => {
+  const friends = await Friend.findAcceptedByUser(userId);
+  return new Set(friends.map((relation) => {
+    const otherId = Number(relation.userId) === Number(userId) ? relation.friendId : relation.userId;
+    return Number(otherId);
+  }));
+};
+
+const assertGroupMembersAreFriends = async (ownerId, memberIds) => {
+  const friendIds = await getAcceptedFriendIdSet(ownerId);
+  const invalidId = memberIds.map(Number).find((id) => !friendIds.has(id));
+  if (invalidId) {
+    const error = new Error('친구만 단체 채팅방에 초대할 수 있습니다.');
+    error.statusCode = 403;
+    throw error;
+  }
+};
 
 const getConversations = async (req, res) => {
   try {
-    const conversations = await Chat.getConversationSummaries(req.user.id);
+    const currentUser = await getCurrentUser(req);
+    const conversations = await Chat.getConversationSummaries(currentUser.id);
     res.json({ conversations: conversations.direct, groups: conversations.groups });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const getMessages = async (req, res) => {
   try {
+    const currentUser = await getCurrentUser(req);
     const { friendId } = req.params;
+    await assertAcceptedFriend(currentUser.id, friendId);
+
     const messages = await Chat.find({
       or: [
-        { senderId: req.user.id, receiverId: friendId },
-        { senderId: friendId, receiverId: req.user.id }
+        { senderId: currentUser.id, receiverId: friendId },
+        { senderId: friendId, receiverId: currentUser.id }
       ]
     });
-    await Chat.upsertRead({ userId: req.user.id, targetType: 'direct', targetId: friendId });
+    await Chat.upsertRead({ userId: currentUser.id, targetType: 'direct', targetId: friendId });
     res.json(messages);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const sendMessage = async (req, res) => {
   try {
+    const currentUser = await getCurrentUser(req);
     const { receiverId, message } = req.body;
     if (!receiverId || !String(message || '').trim()) {
       return res.status(400).json({ error: 'receiverId와 message가 필요합니다.' });
     }
+    await assertAcceptedFriend(currentUser.id, receiverId);
+
     const chat = await Chat.create({
-      senderId: req.user.id,
+      senderId: currentUser.id,
       receiverId,
       message: String(message).trim()
     });
-    await Chat.upsertRead({ userId: req.user.id, targetType: 'direct', targetId: receiverId });
+    await Chat.upsertRead({ userId: currentUser.id, targetType: 'direct', targetId: receiverId });
+    await Notification.create({
+      userId: receiverId,
+      type: 'chat',
+      message: `${currentUser.name || currentUser.userid}\uB2D8\uC774 \uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0C8\uC2B5\uB2C8\uB2E4.`
+    });
     res.status(201).json({ message: 'Message sent', chat });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const deleteMessage = async (req, res) => {
   try {
-    const chat = await Chat.deleteMessage({ messageId: req.params.messageId, userId: req.user.id });
+    const currentUser = await getCurrentUser(req);
+    const chat = await Chat.deleteMessage({ messageId: req.params.messageId, userId: currentUser.id });
     res.json({ message: 'Message deleted', chat });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const markDirectRead = async (req, res) => {
   try {
-    await Chat.upsertRead({ userId: req.user.id, targetType: 'direct', targetId: req.params.friendId });
+    const currentUser = await getCurrentUser(req);
+    await assertAcceptedFriend(currentUser.id, req.params.friendId);
+    await Chat.upsertRead({ userId: currentUser.id, targetType: 'direct', targetId: req.params.friendId });
     res.json({ message: 'Read marked' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const createGroup = async (req, res) => {
   try {
+    const currentUser = await getCurrentUser(req);
     const name = String(req.body.name || '').trim();
-    const memberIds = Array.isArray(req.body.memberIds) ? req.body.memberIds : [];
+    const memberIds = [...new Set((Array.isArray(req.body.memberIds) ? req.body.memberIds : [])
+      .map(Number)
+      .filter((id) => Number.isFinite(id) && id !== Number(currentUser.id)))];
+
     if (!name) return res.status(400).json({ error: '그룹 이름이 필요합니다.' });
-    const group = await Chat.createGroup({ ownerId: req.user.id, name, memberIds });
+    if (!memberIds.length) return res.status(400).json({ error: '초대할 친구를 선택해주세요.' });
+
+    await assertGroupMembersAreFriends(currentUser.id, memberIds);
+    const group = await Chat.createGroup({ ownerId: currentUser.id, name, memberIds });
     res.status(201).json({ group });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const addGroupMembers = async (req, res) => {
   try {
+    const currentUser = await getCurrentUser(req);
     const { groupId } = req.params;
-    const isMember = await Chat.isGroupMember({ groupId, userId: req.user.id });
+    const isMember = await Chat.isGroupMember({ groupId, userId: currentUser.id });
     if (!isMember) return res.status(403).json({ error: '그룹 멤버만 친구를 추가할 수 있습니다.' });
-    const memberIds = Array.isArray(req.body.memberIds) ? req.body.memberIds : [];
+
+    const memberIds = [...new Set((Array.isArray(req.body.memberIds) ? req.body.memberIds : [])
+      .map(Number)
+      .filter((id) => Number.isFinite(id) && id !== Number(currentUser.id)))];
+    await assertGroupMembersAreFriends(currentUser.id, memberIds);
     await Promise.all(memberIds.map((userId) => Chat.addGroupMember({ groupId, userId })));
     res.json({ message: 'Members added' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const getGroupMessages = async (req, res) => {
   try {
+    const currentUser = await getCurrentUser(req);
     const { groupId } = req.params;
-    const isMember = await Chat.isGroupMember({ groupId, userId: req.user.id });
+    const isMember = await Chat.isGroupMember({ groupId, userId: currentUser.id });
     if (!isMember) return res.status(403).json({ error: '그룹 멤버만 메시지를 볼 수 있습니다.' });
+
     const messages = await Chat.getGroupMessages(groupId);
-    await Chat.upsertRead({ userId: req.user.id, targetType: 'group', targetId: groupId });
+    await Chat.upsertRead({ userId: currentUser.id, targetType: 'group', targetId: groupId });
     res.json(messages);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const sendGroupMessage = async (req, res) => {
   try {
+    const currentUser = await getCurrentUser(req);
     const { groupId } = req.params;
     const message = String(req.body.message || '').trim();
     if (!message) return res.status(400).json({ error: 'message가 필요합니다.' });
-    const isMember = await Chat.isGroupMember({ groupId, userId: req.user.id });
+
+    const isMember = await Chat.isGroupMember({ groupId, userId: currentUser.id });
     if (!isMember) return res.status(403).json({ error: '그룹 멤버만 메시지를 보낼 수 있습니다.' });
-    const chat = await Chat.createGroupMessage({ groupId, senderId: req.user.id, message });
-    await Chat.upsertRead({ userId: req.user.id, targetType: 'group', targetId: groupId });
+
+    const chat = await Chat.createGroupMessage({ groupId, senderId: currentUser.id, message });
+    await Chat.upsertRead({ userId: currentUser.id, targetType: 'group', targetId: groupId });
+    const memberIds = await Chat.getGroupMemberIds(groupId);
+    await Promise.all(memberIds
+      .filter((userId) => Number(userId) !== Number(currentUser.id))
+      .map((userId) => Notification.create({
+        userId,
+        type: 'chat',
+        message: `${currentUser.name || currentUser.userid}\uB2D8\uC774 \uADF8\uB8F9 \uCC44\uD305\uC5D0 \uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0C8\uC2B5\uB2C8\uB2E4.`
+      })));
     res.status(201).json({ message: 'Message sent', chat });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const deleteGroupMessage = async (req, res) => {
   try {
-    const chat = await Chat.deleteGroupMessage({ messageId: req.params.messageId, userId: req.user.id });
+    const currentUser = await getCurrentUser(req);
+    const chat = await Chat.deleteGroupMessage({ messageId: req.params.messageId, userId: currentUser.id });
     res.json({ message: 'Message deleted', chat });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const markGroupRead = async (req, res) => {
   try {
-    await Chat.upsertRead({ userId: req.user.id, targetType: 'group', targetId: req.params.groupId });
+    const currentUser = await getCurrentUser(req);
+    await Chat.upsertRead({ userId: currentUser.id, targetType: 'group', targetId: req.params.groupId });
     res.json({ message: 'Read marked' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 
 const searchMessages = async (req, res) => {
   try {
+    const currentUser = await getCurrentUser(req);
     const { query } = req.query;
-    const messages = await Chat.search(req.user.id, query);
+    const messages = await Chat.search(currentUser.id, query || '');
     res.json(messages);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 };
 

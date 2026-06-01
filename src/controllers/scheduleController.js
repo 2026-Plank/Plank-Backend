@@ -14,7 +14,7 @@ const getSchedules = async (req, res) => {
   try {
     const { teamId } = req.params;
     const requestedTeamId = teamId || req.query.teamId;
-    const schedules = await getTeamSchedules(requestedTeamId);
+    const schedules = await getTeamSchedules({ userId: req.user.id, teamId: requestedTeamId });
     res.json({ schedules });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });
@@ -35,7 +35,7 @@ const updateScheduleById = async (req, res) => {
 const deleteScheduleById = async (req, res) => {
   try {
     const { id } = req.params;
-    await deleteSchedule(id);
+    await deleteSchedule({ id, userId: req.user.id });
     res.json({ message: 'Schedule deleted' });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });

@@ -223,6 +223,14 @@ const isGroupMember = async ({ groupId, userId }) => {
   return Boolean(result.rows[0]);
 };
 
+const getGroupMemberIds = async (groupId) => {
+  const result = await execute(
+    `SELECT userId AS "userId" FROM chat_group_members WHERE groupId = :groupId`,
+    { groupId }
+  );
+  return result.rows.map((row) => row.userId);
+};
+
 const createGroupMessage = async ({ groupId, senderId, message }) => {
   await execute(
     `INSERT INTO chat_group_messages (groupId, senderId, message, timestamp) VALUES (:groupId, :senderId, :message, SYSDATE)`,
@@ -277,7 +285,8 @@ const getConversationSummaries = async (userId) => {
       u.userid AS "userid",
       u.email AS "email",
       u.name AS "name",
-      u.profile AS "profile",
+      u.job AS "job",
+      NULL AS "profile",
       u.presenceStatus AS "presenceStatus",
       latest.message AS "lastMessage",
       latest.timestamp AS "lastTimestamp",
@@ -317,6 +326,7 @@ const getConversationSummaries = async (userId) => {
       'group' AS "type",
       g.id AS "groupId",
       g.name AS "name",
+      '그룹 채팅' AS "job",
       latest.message AS "lastMessage",
       latest.timestamp AS "lastTimestamp",
       (
@@ -360,6 +370,7 @@ module.exports = {
   createGroup,
   addGroupMember,
   isGroupMember,
+  getGroupMemberIds,
   createGroupMessage,
   getGroupMessages,
   deleteGroupMessage,
