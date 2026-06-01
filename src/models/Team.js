@@ -1,235 +1,214 @@
-<<<<<<< HEAD
 const db = require('../config/db.config');
 
+const runIgnore = async (sql, ignoredCodes = []) => {
+  try {
+    await db.execute(sql);
+  } catch (error) {
+    if (!ignoredCodes.includes(error.errorNum)) {
+      throw error;
+    }
+  }
+};
+
+const teamSelect = `
+  id AS "id",
+  teamname AS "name",
+  personnel AS "personnel",
+  teamcode AS "teamCode",
+  dpnum AS "dpNum",
+  DBMS_LOB.SUBSTR(dpname, 2000, 1) AS "dpName",
+  DBMS_LOB.SUBSTR(dpleader, 2000, 1) AS "dpLeader",
+  deadline AS "deadline"
+`;
+
+const memberSelect = `
+  tm.teamid AS "teamId",
+  tm.userid AS "id",
+  tm.role AS "role",
+  tm.department AS "department",
+  tm.jobdetail AS "jobDetail",
+  u.id AS "userPk",
+  u.name AS "name",
+  u.email AS "email"
+`;
+
 const Team = {
-  findByInviteCode: async (inviteCode) => {
-    const query = `
-      SELECT id, name, inviteCode, adminId, createdAt
-      FROM teams
-      WHERE inviteCode = ?
-      LIMIT 1
-    `;
-    const [rows] = await db.execute(query, [inviteCode]);
-    return rows[0] || null;
+  ensureSchema: async () => {
+    await runIgnore(`CREATE SEQUENCE teams_seq`, [955]);
+    await runIgnore(`
+      CREATE TABLE teams (
+        id NUMBER PRIMARY KEY,
+        teamname VARCHAR2(100 CHAR) NOT NULL,
+        personnel NUMBER DEFAULT 1 NOT NULL,
+        teamcode VARCHAR2(50 CHAR) UNIQUE,
+        dpnum NUMBER DEFAULT 1,
+        dpname CLOB,
+        dpleader CLOB,
+        deadline DATE NOT NULL
+      )
+    `, [955]);
+    await db.execute(`
+      CREATE OR REPLACE TRIGGER teams_trg
+      BEFORE INSERT ON teams
+      FOR EACH ROW
+      WHEN (new.id IS NULL)
+      BEGIN
+        SELECT teams_seq.NEXTVAL
+        INTO :new.id
+        FROM dual;
+      END;
+    `);
+
+    await runIgnore(`ALTER TABLE teams ADD teamname VARCHAR2(100 CHAR)`, [1430]);
+    await runIgnore(`ALTER TABLE teams ADD personnel NUMBER DEFAULT 1 NOT NULL`, [1430]);
+    await runIgnore(`ALTER TABLE teams ADD teamcode VARCHAR2(50 CHAR)`, [1430]);
+    await runIgnore(`ALTER TABLE teams ADD dpnum NUMBER DEFAULT 1`, [1430]);
+    await runIgnore(`ALTER TABLE teams ADD dpname CLOB`, [1430]);
+    await runIgnore(`ALTER TABLE teams ADD dpleader CLOB`, [1430]);
+    await runIgnore(`ALTER TABLE teams ADD deadline DATE`, [1430]);
+
+    await runIgnore(`
+      CREATE TABLE team_members (
+        teamid NUMBER NOT NULL,
+        userid VARCHAR2(50 CHAR) NOT NULL,
+        role VARCHAR2(10 CHAR) DEFAULT 'User',
+        department VARCHAR2(50 CHAR),
+        jobdetail VARCHAR2(200 CHAR)
+      )
+    `, [955]);
+    await runIgnore(`ALTER TABLE team_members ADD department VARCHAR2(50 CHAR)`, [1430]);
+    await runIgnore(`ALTER TABLE team_members ADD jobdetail VARCHAR2(200 CHAR)`, [1430]);
   },
 
-  findById: async (id) => {
-    const query = `
-      SELECT id, name, inviteCode, adminId, createdAt
-      FROM teams
-      WHERE id = ?
-      LIMIT 1
-    `;
-    const [rows] = await db.execute(query, [id]);
-    return rows[0] || null;
+  create: async ({ name, personnel = 1, teamCode, dpNum = 1, dpName = '', dpLeader = '', deadline }) => {
+    await db.execute(
+      `INSERT INTO teams (teamname, personnel, teamcode, dpnum, dpname, dpleader, deadline)
+       VALUES (:name, :personnel, :teamCode, :dpNum, :dpName, :dpLeader, TO_DATE(:deadline, 'YYYY-MM-DD'))`,
+      { name, personnel, teamCode, dpNum, dpName, dpLeader, deadline }
+    );
+    return Team.findOne({ teamCode });
+  },
+
+  findOne: async (filter = {}) => {
+    const clauses = [];
+    const binds = {};
+    if (filter.id !== undefined) {
+      clauses.push('id = :id');
+      binds.id = filter.id;
+    }
+    if (filter.teamCode !== undefined) {
+      clauses.push('teamcode = :teamCode');
+      binds.teamCode = filter.teamCode;
+    }
+    if (!clauses.length) return null;
+
+    const result = await db.execute(
+      `SELECT ${teamSelect}
+       FROM teams
+       WHERE ${clauses.join(' AND ')}
+       FETCH FIRST 1 ROWS ONLY`,
+      binds
+    );
+    return result.rows[0] || null;
+  },
+
+  addMember: async (teamId, userid, role = 'User') => {
+    await db.execute(
+      `MERGE INTO team_members tm
+       USING (SELECT :teamId AS teamid, :userid AS userid FROM dual) src
+       ON (tm.teamid = src.teamid AND tm.userid = src.userid)
+       WHEN MATCHED THEN UPDATE SET role = :role
+       WHEN NOT MATCHED THEN INSERT (teamid, userid, role) VALUES (:teamId, :userid, :role)`,
+      { teamId, userid, role }
+    );
+  },
+
+  isMember: async (teamId, userid) => {
+    const result = await db.execute(
+      `SELECT userid AS "userid"
+       FROM team_members
+       WHERE teamid = :teamId AND userid = :userid
+       FETCH FIRST 1 ROWS ONLY`,
+      { teamId, userid }
+    );
+    return Boolean(result.rows[0]);
+  },
+
+  getMembers: async (teamId) => {
+    const result = await db.execute(
+      `SELECT ${memberSelect}
+       FROM team_members tm
+       LEFT JOIN users u ON u.userid = tm.userid
+       WHERE tm.teamid = :teamId
+       ORDER BY tm.role, u.name, tm.userid`,
+      { teamId }
+    );
+    return result.rows;
+  },
+
+  getUserTeams: async (userid) => {
+    const result = await db.execute(
+      `SELECT ${teamSelect}, tm.role AS "role"
+       FROM teams t
+       JOIN team_members tm ON tm.teamid = t.id
+       WHERE tm.userid = :userid
+       ORDER BY t.deadline ASC, t.id DESC`,
+      { userid }
+    );
+    return result.rows;
+  },
+
+  update: async (teamId, updates = {}) => {
+    const columnMap = {
+      name: 'teamname',
+      personnel: 'personnel',
+      teamCode: 'teamcode',
+      dpNum: 'dpnum',
+      dpName: 'dpname',
+      dpLeader: 'dpleader',
+      deadline: 'deadline'
+    };
+    const fields = Object.keys(updates).filter((key) => columnMap[key]);
+    if (!fields.length) return Team.findOne({ id: teamId });
+
+    const setClauses = fields.map((key) => {
+      if (key === 'deadline') return `${columnMap[key]} = TO_DATE(:${key}, 'YYYY-MM-DD')`;
+      return `${columnMap[key]} = :${key}`;
+    });
+    await db.execute(
+      `UPDATE teams SET ${setClauses.join(', ')} WHERE id = :teamId`,
+      { teamId, ...updates }
+    );
+    return Team.findOne({ id: teamId });
+  },
+
+  remove: async (teamId) => {
+    await db.execute(`DELETE FROM team_members WHERE teamid = :teamId`, { teamId });
+    await db.execute(`DELETE FROM teams WHERE id = :teamId`, { teamId });
+  },
+
+  removeMember: async (teamId, userid) => {
+    await db.execute(
+      `DELETE FROM team_members WHERE teamid = :teamId AND userid = :userid`,
+      { teamId, userid }
+    );
+  },
+
+  updateMemberRole: async (teamId, userid, role) => {
+    await db.execute(
+      `UPDATE team_members SET role = :role WHERE teamid = :teamId AND userid = :userid`,
+      { teamId, userid, role }
+    );
+  },
+
+  updateMemberDepartment: async (teamId, userid, department, jobDetail, role = 'User') => {
+    await db.execute(
+      `UPDATE team_members
+       SET department = :department, jobdetail = :jobDetail, role = :role
+       WHERE teamid = :teamId AND userid = :userid`,
+      { teamId, userid, department, jobDetail, role }
+    );
   }
 };
 
 module.exports = Team;
-=======
-const { execute } = require('../config/db.config');
-
-const mapRow = (row) => {
-  if (!row) return null;
-  return {
-    id: row.id,
-    name: row.name,
-    personnel: row.personnel,
-    teamCode: row.teamCode,
-    dpNum: row.dpNum,
-    dpName: row.dpName,
-    dpLeader: row.dpLeader,
-    deadline: row.deadline,
-    role: row.role
-  };
-};
-
-const parseMemberRole = (role = '') => {
-  const value = String(role || '');
-  if (value === 'Admin') {
-    return { role: value, department: '기획자', jobDetail: '프로젝트 리더' };
-  }
-  if (!value.startsWith('Member|')) {
-    return { role: value || 'User', department: '', jobDetail: '' };
-  }
-  const [, department = '', jobDetail = ''] = value.split('|');
-  return { role: value, department, jobDetail };
-};
-
-const ensureColumn = async (columnName, definition) => {
-  const result = await execute(
-    `SELECT 1
-     FROM USER_TAB_COLUMNS
-     WHERE TABLE_NAME = 'TEAM_MEMBERS'
-       AND COLUMN_NAME = :columnName`,
-    { columnName }
-  );
-
-  if (result.rows.length === 0) {
-    await execute(`ALTER TABLE team_members ADD (${definition})`);
-  }
-};
-
-const ensureSchema = async () => {
-  await ensureColumn('DEPARTMENT', 'department VARCHAR2(50 CHAR)');
-  await ensureColumn('JOBDETAIL', 'jobdetail VARCHAR2(200 CHAR)');
-};
-
-const create = async ({ name, personnel, teamCode, dpNum, dpName, dpLeader, deadline }) => {
-  const sql = `INSERT INTO teams (teamname, personnel, teamcode, dpnum, dpname, dpleader, deadline)
-               VALUES (:name, :personnel, :teamCode, :dpNum, :dpName, :dpLeader, TO_DATE(:deadline, 'YYYY-MM-DD'))`;
-  await execute(sql, { name, personnel, teamCode, dpNum, dpName, dpLeader, deadline });
-  return findOne({ teamCode });
-};
-
-const findOne = async (filter) => {
-  const keys = Object.keys(filter || {});
-  const columnMap = {
-    id: 'id',
-    name: 'teamname',
-    teamCode: 'teamcode'
-  };
-  const clause = keys.length
-    ? `WHERE ${keys.map((key) => `${columnMap[key] || key} = :${key}`).join(' AND ')}`
-    : '';
-
-  const sql = `SELECT id AS "id",
-                      teamname AS "name",
-                      personnel AS "personnel",
-                      teamcode AS "teamCode",
-                      dpnum AS "dpNum",
-                      DBMS_LOB.SUBSTR(dpname, 4000, 1) AS "dpName",
-                      DBMS_LOB.SUBSTR(dpleader, 4000, 1) AS "dpLeader",
-                      deadline AS "deadline"
-               FROM teams ${clause}`;
-  const result = await execute(sql, filter);
-  return mapRow(result.rows[0] || null);
-};
-
-const findAll = async () => {
-  const sql = `SELECT id AS "id",
-                      teamname AS "name",
-                      personnel AS "personnel",
-                      teamcode AS "teamCode",
-                      dpnum AS "dpNum",
-                      DBMS_LOB.SUBSTR(dpname, 4000, 1) AS "dpName",
-                      DBMS_LOB.SUBSTR(dpleader, 4000, 1) AS "dpLeader",
-                      deadline AS "deadline"
-               FROM teams
-               ORDER BY id DESC`;
-  const result = await execute(sql);
-  return result.rows.map(mapRow);
-};
-
-const getUserTeams = async (userId) => {
-  const sql = `SELECT t.id AS "id",
-                      t.teamname AS "name",
-                      t.personnel AS "personnel",
-                      t.teamcode AS "teamCode",
-                      t.dpnum AS "dpNum",
-                      DBMS_LOB.SUBSTR(t.dpname, 4000, 1) AS "dpName",
-                      DBMS_LOB.SUBSTR(t.dpleader, 4000, 1) AS "dpLeader",
-                      t.deadline AS "deadline",
-                      tm.role AS "role"
-               FROM teams t
-               JOIN team_members tm ON t.id = tm.teamid
-               WHERE tm.userid = :userId
-               ORDER BY t.id DESC`;
-  const result = await execute(sql, { userId });
-  return result.rows.map(mapRow);
-};
-
-const addMember = async (teamId, userId, role = 'User') => {
-  const sql = `INSERT INTO team_members (teamid, userid, role) VALUES (:teamId, :userId, :role)`;
-  await execute(sql, { teamId, userId, role });
-};
-
-const isMember = async (teamId, userId) => {
-  const sql = `SELECT 1 FROM team_members WHERE teamid = :teamId AND userid = :userId`;
-  const result = await execute(sql, { teamId, userId });
-  return result.rows.length > 0;
-};
-
-const update = async (id, updates) => {
-  const fields = Object.keys(updates || {});
-  if (!fields.length) return findOne({ id });
-
-  const columnMap = {
-    name: 'teamname',
-    personnel: 'personnel',
-    teamCode: 'teamcode',
-    dpNum: 'dpnum',
-    dpName: 'dpname',
-    dpLeader: 'dpleader',
-    deadline: 'deadline'
-  };
-
-  const setClauses = fields.map((field) => {
-    const column = columnMap[field] || field;
-    return field === 'deadline' ? `${column} = TO_DATE(:${field}, 'YYYY-MM-DD')` : `${column} = :${field}`;
-  });
-  const binds = { id, ...updates };
-  const sql = `UPDATE teams SET ${setClauses.join(', ')} WHERE id = :id`;
-  await execute(sql, binds);
-  return findOne({ id });
-};
-
-const remove = async (id) => {
-  // First remove all team members
-  await execute(`DELETE FROM team_members WHERE teamid = :id`, { id });
-  // Then remove the team
-  await execute(`DELETE FROM teams WHERE id = :id`, { id });
-};
-
-const getMembers = async (teamId) => {
-  const sql = `SELECT tm.userid AS "id",
-                      tm.role AS "role",
-                      tm.department AS "department",
-                      tm.jobdetail AS "jobDetail",
-                      u.id AS "userPk",
-                      u.name AS "name",
-                      u.email AS "email"
-               FROM team_members tm
-               JOIN users u ON tm.userid = u.userid
-               WHERE tm.teamid = :teamId
-               ORDER BY tm.role DESC, u.name`;
-  const result = await execute(sql, { teamId });
-  return result.rows.map((row) => ({
-    id: row.id,
-    role: row.role,
-    userPk: row.userPk,
-    name: row.name,
-    email: row.email,
-    ...parseMemberRole(row.role),
-    department: row.department || parseMemberRole(row.role).department,
-    jobDetail: row.jobDetail || parseMemberRole(row.role).jobDetail
-  }));
-};
-
-const removeMember = async (teamId, userId) => {
-  await execute(`DELETE FROM team_members WHERE teamid = :teamId AND userid = :userId`, { teamId, userId });
-};
-
-const updateMemberRole = async (teamId, userId, role) => {
-  await execute(`UPDATE team_members SET role = :role WHERE teamid = :teamId AND userid = :userId`, { teamId, userId, role });
-};
-
-const updateMemberDepartment = async (teamId, userId, department, jobDetail, role = 'User') => {
-  await execute(
-    `UPDATE team_members
-     SET role = :role,
-         department = :department,
-         jobdetail = :jobDetail
-     WHERE teamid = :teamId AND userid = :userId`,
-    {
-      teamId,
-      userId,
-      role,
-      department,
-      jobDetail
-    }
-  );
-};
-
-module.exports = { create, findOne, findAll, getUserTeams, addMember, isMember, update, remove, getMembers, removeMember, updateMemberRole, updateMemberDepartment, ensureSchema };
->>>>>>> 6b0dad0c16077e3674c3d16d79957895695a9153
