@@ -8,7 +8,15 @@ const buildWhere = (filter) => {
   return { clause: `WHERE ${clauses.join(' AND ')}`, binds };
 };
 
-const ensurePresenceColumn = async () => {
+const runIgnore = async (sql, ignoredCodes = []) => {
+  try {
+    await execute(sql);
+  } catch (error) {
+    if (!ignoredCodes.includes(error.errorNum)) throw error;
+  }
+};
+
+const ensureProfileColumns = async () => {
   await execute(`
     BEGIN
       EXECUTE IMMEDIATE 'ALTER TABLE users ADD presenceStatus VARCHAR2(20) DEFAULT ''ONLINE'' NOT NULL';
@@ -19,7 +27,33 @@ const ensurePresenceColumn = async () => {
         END IF;
     END;
   `);
+
+  await runIgnore(`ALTER TABLE users ADD job VARCHAR2(100 CHAR)`, [1430]);
+  await runIgnore(`ALTER TABLE users ADD statusMessage VARCHAR2(200 CHAR)`, [1430]);
 };
+
+const userSelectWithPassword = `
+  id AS "id",
+  userid AS "userid",
+  email AS "email",
+  password AS "password",
+  name AS "name",
+  job AS "job",
+  statusMessage AS "statusMessage",
+  profile AS "profile",
+  presenceStatus AS "presenceStatus"
+`;
+
+const userSelect = `
+  id AS "id",
+  userid AS "userid",
+  email AS "email",
+  name AS "name",
+  job AS "job",
+  statusMessage AS "statusMessage",
+  profile AS "profile",
+  presenceStatus AS "presenceStatus"
+`;
 
 const create = async ({ userid, email, password, name }) => {
   const sql = `INSERT INTO users (userid, email, password, name) VALUES (:userid, :email, :password, :name)`;
@@ -28,7 +62,7 @@ const create = async ({ userid, email, password, name }) => {
 };
 
 const findOne = async (filter) => {
-  let sql = 'SELECT id AS "id", userid AS "userid", email AS "email", password AS "password", name AS "name", profile AS "profile", presenceStatus AS "presenceStatus" FROM users';
+  let sql = `SELECT ${userSelectWithPassword} FROM users`;
   const { clause, binds } = buildWhere(filter);
   sql += ` ${clause}`;
   const result = await execute(sql, binds);
@@ -36,13 +70,13 @@ const findOne = async (filter) => {
 };
 
 const findByLoginId = async (loginId) => {
-  const sql = 'SELECT id AS "id", userid AS "userid", email AS "email", password AS "password", name AS "name", profile AS "profile", presenceStatus AS "presenceStatus" FROM users WHERE email = :loginId OR userid = :loginId';
+  const sql = `SELECT ${userSelectWithPassword} FROM users WHERE email = :loginId OR userid = :loginId`;
   const result = await execute(sql, { loginId });
   return result.rows[0] || null;
 };
 
 const findByEmailOrUserid = async ({ email, userid }) => {
-  const sql = 'SELECT id AS "id", userid AS "userid", email AS "email", password AS "password", name AS "name", profile AS "profile", presenceStatus AS "presenceStatus" FROM users WHERE email = :email OR userid = :userid';
+  const sql = `SELECT ${userSelectWithPassword} FROM users WHERE email = :email OR userid = :userid`;
   const result = await execute(sql, { email, userid });
   return result.rows[0] || null;
 };
@@ -70,7 +104,7 @@ const findOneAndUpdate = async (filter, updates) => {
 };
 
 const find = async (filter) => {
-  let sql = 'SELECT id AS "id", userid AS "userid", email AS "email", name AS "name", profile AS "profile", presenceStatus AS "presenceStatus" FROM users';
+  let sql = `SELECT ${userSelect} FROM users`;
   const { clause, binds } = buildWhere(filter);
   sql += ` ${clause}`;
   const result = await execute(sql, binds);
@@ -78,7 +112,7 @@ const find = async (filter) => {
 };
 
 const search = async (keyword) => {
-  const sql = `SELECT id AS "id", userid AS "userid", email AS "email", name AS "name", profile AS "profile", presenceStatus AS "presenceStatus"
+  const sql = `SELECT ${userSelect}
                FROM users
                WHERE LOWER(userid) LIKE LOWER(:keyword)
                   OR LOWER(email) LIKE LOWER(:keyword)
@@ -88,4 +122,4 @@ const search = async (keyword) => {
   return result.rows;
 };
 
-module.exports = { ensurePresenceColumn, create, findOne, findByLoginId, findByEmailOrUserid, findById, findByIdAndUpdate, findOneAndUpdate, find, search };
+module.exports = { ensureProfileColumns, ensurePresenceColumn: ensureProfileColumns, create, findOne, findByLoginId, findByEmailOrUserid, findById, findByIdAndUpdate, findOneAndUpdate, find, search };

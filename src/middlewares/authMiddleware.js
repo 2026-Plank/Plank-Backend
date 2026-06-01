@@ -7,13 +7,11 @@ const verifyToken = async (req, res, next) => {
     return res.status(401).json({ message: '인증 토큰이 없습니다.' });
   }
 
-    try {
-        const decoded = verifyJwt(token);
-        req.user = {
-            ...decoded,
-            id: decoded.id || decoded.userPk || decoded.user_id,
-            userId: decoded.userId || decoded.userid
-        };
+  try {
+    const decoded = verifyJwt(token);
+    const idCandidate = decoded.id || decoded.userPk || decoded.user_id;
+    const loginIdCandidate = decoded.userid || decoded.userId;
+    let user = null;
 
     if (idCandidate && Number.isFinite(Number(idCandidate))) {
       user = await User.findById(Number(idCandidate));
