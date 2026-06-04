@@ -45,9 +45,9 @@ app.use((req, res, next) => {
 
 app.use(errorHandler);
 
-module.exports = app;
-
 if (require.main === module) {
   const { startServer } = require('./server');
   startServer(app);
 }
+
+module.exports = app;
