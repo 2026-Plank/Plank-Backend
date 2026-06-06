@@ -57,6 +57,7 @@ const ensureTable = async () => {
   await runIgnore(`ALTER TABLE tasks_schedules ADD type VARCHAR2(30 CHAR) DEFAULT 'Task' NOT NULL`, [1430]);
   await runIgnore(`ALTER TABLE tasks_schedules MODIFY type VARCHAR2(30 CHAR)`, []);
   await runIgnore(`ALTER TABLE tasks_schedules DROP CONSTRAINT SYS_C008357`, [2443]);
+  await runIgnore(`ALTER TABLE tasks_schedules DROP CONSTRAINT SYS_C008239`, [2443]);
   await runIgnore(`ALTER TABLE tasks_schedules ADD title VARCHAR2(200 CHAR)`, [1430]);
   await runIgnore(`ALTER TABLE tasks_schedules ADD description VARCHAR2(2000 CHAR)`, [1430]);
   await runIgnore(`ALTER TABLE tasks_schedules ADD dpName VARCHAR2(200 CHAR)`, [1430]);
