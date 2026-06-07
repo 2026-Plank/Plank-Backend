@@ -301,7 +301,9 @@ const getConversationSummaries = async (userId) => {
           AND c.senderId = u.id
           AND c.timestamp > NVL(r.lastReadAt, TO_DATE('1970-01-01', 'YYYY-MM-DD'))
       ) AS "unreadCount"
-    FROM (
+    FROM friends f
+    JOIN users u ON u.id = CASE WHEN f.userId = :userId THEN f.friendId ELSE f.userId END
+    LEFT JOIN (
       SELECT otherId, message, timestamp
       FROM (
         SELECT
@@ -316,9 +318,10 @@ const getConversationSummaries = async (userId) => {
         WHERE senderId = :userId OR receiverId = :userId
       )
       WHERE rn = 1
-    ) latest
-    JOIN users u ON u.id = latest.otherId
-    ORDER BY latest.timestamp DESC
+    ) latest ON latest.otherId = u.id
+    WHERE (f.userId = :userId OR f.friendId = :userId)
+      AND LOWER(f.status) = 'accepted'
+    ORDER BY NVL(latest.timestamp, TO_DATE('1970-01-01', 'YYYY-MM-DD')) DESC
   `;
 
   const groupSql = `
