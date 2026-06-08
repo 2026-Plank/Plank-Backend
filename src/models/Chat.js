@@ -110,7 +110,7 @@ const ensureTable = async () => {
 
 const create = async ({ senderId, receiverId, message }) => {
   await execute(
-    `INSERT INTO chats (senderId, receiverId, message, timestamp) VALUES (:senderId, :receiverId, :message, SYSDATE)`,
+    `INSERT INTO chats (senderId, receiverId, message, timestamp) VALUES (:senderId, :receiverId, :message, CURRENT_TIMESTAMP)`,
     { senderId, receiverId, message }
   );
   const result = await execute(
@@ -233,7 +233,7 @@ const getGroupMemberIds = async (groupId) => {
 
 const createGroupMessage = async ({ groupId, senderId, message }) => {
   await execute(
-    `INSERT INTO chat_group_messages (groupId, senderId, message, timestamp) VALUES (:groupId, :senderId, :message, SYSDATE)`,
+    `INSERT INTO chat_group_messages (groupId, senderId, message, timestamp) VALUES (:groupId, :senderId, :message, CURRENT_TIMESTAMP)`,
     { groupId, senderId, message }
   );
   const result = await execute(
