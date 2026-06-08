@@ -5,6 +5,10 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 let pool;
 
 const connectDB = async () => {
+  if (pool) {
+    return pool;
+  }
+
   try {
     pool = await oracledb.createPool({
       user: process.env.DB_USER,
@@ -15,14 +19,12 @@ const connectDB = async () => {
       poolIncrement: 1
     });
 
-    // Verify a physical connection so invalid credentials fail fast.
-    const connection = await pool.getConnection();
-    await connection.close();
+    console.log('Oracle Pool Created');
 
-    console.log('Oracle DB connected');
+    return pool;
   } catch (error) {
     console.error('Oracle DB connection error:', error);
-    process.exit(1);
+    throw error;
   }
 };
 
