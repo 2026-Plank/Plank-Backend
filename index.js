@@ -48,7 +48,7 @@ if (process.env.NODE_ENV !== 'production') {
   });
 } else {
   // Vercel 배포 환경일 때는 포트를 열지 않고 초기화만 조용히 실행합니다.
-  initializeDatabase();
+  connectDB();
 }
 
 // Vercel 서버리스용 내보내기
