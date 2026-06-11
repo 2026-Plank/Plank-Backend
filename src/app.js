@@ -31,6 +31,11 @@ app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.json());
 
+app.use((req, res, next) => {
+  console.log('Request path:', req.originalUrl);
+  next();
+});
+
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.use('/api/auth', authRoutes);
@@ -46,11 +51,6 @@ app.use('/api/home', homeRoutes);
 app.post('/login', authController.login);
 app.post('/sign', authController.sign);
 app.post('/signup', authController.sign);
-
-app.use((req, res, next) => {
-  console.log('Request path:', req.originalUrl);
-  next();
-});
 
 app.use(errorHandler);
 
