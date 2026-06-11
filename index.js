@@ -37,19 +37,13 @@ const initializeDatabase = async () => {
   }
 };
 
-// 서버 실행 분기
-if (process.env.NODE_ENV !== 'production') {
-  // 로컬 환경일 때 포트를 열어서 listen 합니다.
-  const PORT = process.env.PORT || 3000;
-  initializeDatabase().then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running locally on port ${PORT}`);
-    });
+const PORT = process.env.PORT || 3000;
+
+initializeDatabase().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running locally on port ${PORT}`);
   });
-} else {
-  // Vercel 배포 환경일 때는 포트를 열지 않고 초기화만 조용히 실행합니다.
-  connectDB();
-}
+});
 
 // Vercel 서버리스용 내보내기
 module.exports = app;
