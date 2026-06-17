@@ -23,7 +23,7 @@ const ensureTable = async () => {
           content VARCHAR2(1000) NOT NULL,
           rating NUMBER(1) DEFAULT 5 NOT NULL,
           category VARCHAR2(20) DEFAULT ''team'' NOT NULL,
-          createdAt DATE DEFAULT CAST(SYSTIMESTAMP AT TIME ZONE ''Asia/Seoul'' AS DATE) NOT NULL,
+          createdAt DATE DEFAULT CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL ''9'' HOUR AS DATE) NOT NULL,
           CONSTRAINT chk_feedback_rating CHECK (rating BETWEEN 1 AND 5),
           CONSTRAINT chk_feedback_category CHECK (category IN (''personal'', ''team''))
         )
@@ -41,7 +41,7 @@ const create = async ({ fromUserId, toUserId, teamId, content, rating = 5 }) => 
   const normalizedToUserId = toUserId || fromUserId;
   await execute(
     `INSERT INTO feedbacks (fromUserId, toUserId, teamId, content, rating, category, createdAt)
-     VALUES (:fromUserId, :toUserId, :teamId, :content, :rating, :category, CAST(SYSTIMESTAMP AT TIME ZONE 'Asia/Seoul' AS DATE))`,
+     VALUES (:fromUserId, :toUserId, :teamId, :content, :rating, :category, CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR AS DATE))`,
     {
       fromUserId,
       toUserId: normalizedToUserId,
