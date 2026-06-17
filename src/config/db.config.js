@@ -1,13 +1,11 @@
 const oracledb = require('oracledb');
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+
+oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
 
 let pool;
-try {
-  oracledb.initOracleClient();
-} catch (err) {
-  console.log('Thick mode unavailable, using Thin mode:', err.message);
-}
 
 const connectDB = async () => {
   if (pool) {
@@ -15,18 +13,21 @@ const connectDB = async () => {
   }
 
   try {
+    console.log('데이터베이스 연결 시도 중... (Easy Connect Mode)');
+    
     pool = await oracledb.createPool({
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
       connectString: process.env.DB_CONNECT_STRING,
+      walletPassword: process.env.WALLET_PASSWORD,
       poolMin: 1,
-      poolMax: 5,
+      poolMax: 4,
       poolIncrement: 1,
       poolTimeout: 60,
       poolPingInterval: 60,
     });
 
-    console.log('Oracle Pool Created');
+    console.log('=== Oracle DB Pool Created Successfully! ===');
     return pool;
   } catch (error) {
     console.error('Oracle DB connection error:', error);
@@ -45,7 +46,6 @@ const execute = async (sql, binds = {}, options = {}) => {
     connection = await pool.getConnection();
     const result = await connection.execute(sql, binds, {
       autoCommit: true,
-      outFormat: oracledb.OUT_FORMAT_OBJECT,
       ...options
     });
     return result;
