@@ -1,16 +1,14 @@
-const { verifyJwt } = require('../utils/jwtHelper');
+const { verifyToken: verifyJwtToken } = require('../utils/jwtHelper');
 const User = require('../models/User');
 
 const verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ message: '인증 토큰이 없습니다.' });
-  }
+  const token = req.headers.authorization?.split(' ')[1] || req.query.token;
+  if (!token) return res.status(401).json({ message: '인증 토큰이 없습니다.' });
 
   try {
-    const decoded = verifyJwt(token);
+    const decoded = verifyJwtToken(token);
     const idCandidate = decoded.id || decoded.userPk || decoded.user_id;
-    const loginIdCandidate = decoded.userid || decoded.userId;
+    const loginIdCandidate = decoded.userId || decoded.userid;
     let user = null;
 
     if (idCandidate && Number.isFinite(Number(idCandidate))) {

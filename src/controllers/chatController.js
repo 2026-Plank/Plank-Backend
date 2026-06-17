@@ -1,48 +1,5 @@
 const Chat = require('../models/Chat');
-const Friend = require('../models/Friend');
-const User = require('../models/User');
-const Notification = require('../models/Notification');
-
-const getCurrentUser = async (req) => {
-  const user = req.user?.id
-    ? await User.findById(req.user.id)
-    : await User.findOne({ userid: req.user?.userId });
-
-  if (!user) {
-    const error = new Error('로그인 사용자를 찾을 수 없습니다. 다시 로그인해주세요.');
-    error.statusCode = 401;
-    throw error;
-  }
-
-  return user;
-};
-
-const assertAcceptedFriend = async (userId, friendId) => {
-  const relation = await Friend.findPair(userId, friendId);
-  if (!relation || String(relation.status).toLowerCase() !== 'accepted') {
-    const error = new Error('친구끼리만 1:1 채팅을 할 수 있습니다.');
-    error.statusCode = 403;
-    throw error;
-  }
-};
-
-const getAcceptedFriendIdSet = async (userId) => {
-  const friends = await Friend.findAcceptedByUser(userId);
-  return new Set(friends.map((relation) => {
-    const otherId = Number(relation.userId) === Number(userId) ? relation.friendId : relation.userId;
-    return Number(otherId);
-  }));
-};
-
-const assertGroupMembersAreFriends = async (ownerId, memberIds) => {
-  const friendIds = await getAcceptedFriendIdSet(ownerId);
-  const invalidId = memberIds.map(Number).find((id) => !friendIds.has(id));
-  if (invalidId) {
-    const error = new Error('친구만 단체 채팅방에 초대할 수 있습니다.');
-    error.statusCode = 403;
-    throw error;
-  }
-};
+const { addClient, broadcastDirectMessage, broadcastGroupMessage } = require('../utils/chatRealtime');
 
 const getConversations = async (req, res) => {
   try {
@@ -87,15 +44,8 @@ const sendMessage = async (req, res) => {
       receiverId,
       message: String(message).trim()
     });
-    await Chat.upsertRead({ userId: currentUser.id, targetType: 'direct', targetId: receiverId });
-    await Notification.create({
-      userId: receiverId,
-      type: 'chat',
-      message: `${currentUser.name || currentUser.userid}\uB2D8\uC774 \uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0C8\uC2B5\uB2C8\uB2E4.`,
-      targetType: 'direct_chat',
-      targetId: String(currentUser.id),
-      actionPath: '/chat'
-    });
+    await Chat.upsertRead({ userId: req.user.id, targetType: 'direct', targetId: receiverId });
+    broadcastDirectMessage(chat);
     res.status(201).json({ message: 'Message sent', chat });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });
@@ -184,24 +134,18 @@ const sendGroupMessage = async (req, res) => {
 
     const isMember = await Chat.isGroupMember({ groupId, userId: currentUser.id });
     if (!isMember) return res.status(403).json({ error: '그룹 멤버만 메시지를 보낼 수 있습니다.' });
-
-    const chat = await Chat.createGroupMessage({ groupId, senderId: currentUser.id, message });
-    await Chat.upsertRead({ userId: currentUser.id, targetType: 'group', targetId: groupId });
+    const chat = await Chat.createGroupMessage({ groupId, senderId: req.user.id, message });
+    await Chat.upsertRead({ userId: req.user.id, targetType: 'group', targetId: groupId });
     const memberIds = await Chat.getGroupMemberIds(groupId);
-    await Promise.all(memberIds
-      .filter((userId) => Number(userId) !== Number(currentUser.id))
-      .map((userId) => Notification.create({
-        userId,
-        type: 'chat',
-        message: `${currentUser.name || currentUser.userid}\uB2D8\uC774 \uADF8\uB8F9 \uCC44\uD305\uC5D0 \uBA54\uC2DC\uC9C0\uB97C \uBCF4\uB0C8\uC2B5\uB2C8\uB2E4.`,
-        targetType: 'group_chat',
-        targetId: String(groupId),
-        actionPath: '/chat'
-      })));
+    broadcastGroupMessage(memberIds, chat);
     res.status(201).json({ message: 'Message sent', chat });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });
   }
+};
+
+const streamChatEvents = async (req, res) => {
+  addClient(req.user.id, res);
 };
 
 const deleteGroupMessage = async (req, res) => {
@@ -247,5 +191,6 @@ module.exports = {
   sendGroupMessage,
   deleteGroupMessage,
   markGroupRead,
-  searchMessages
+  searchMessages,
+  streamChatEvents
 };
