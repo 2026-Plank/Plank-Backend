@@ -18,7 +18,7 @@ const connectDB = async () => {
     pool = await oracledb.createPool({
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
-      connectString: process.env.DB_CONNECT_STRING,
+      connectString: process.env.DB_CONNECT_STRING2 || process.env.DB_CONNECT_STRING,
       poolMin: 1,
       poolMax: 5,
       poolIncrement: 1,
