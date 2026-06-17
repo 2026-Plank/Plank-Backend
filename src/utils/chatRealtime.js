@@ -44,4 +44,8 @@ const broadcastGroupMessage = (memberIds, chat) => {
   memberIds.forEach((userId) => sendToUser(userId, 'chat:group-message', chat));
 };
 
-module.exports = { addClient, broadcastDirectMessage, broadcastGroupMessage };
+const broadcastNotification = (userId, notification) => {
+  sendToUser(userId, 'notification', notification);
+};
+
+module.exports = { addClient, broadcastDirectMessage, broadcastGroupMessage, broadcastNotification };
