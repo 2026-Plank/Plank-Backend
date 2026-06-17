@@ -1,5 +1,48 @@
 const Chat = require('../models/Chat');
+const Friend = require('../models/Friend');
+const User = require('../models/User');
 const { addClient, broadcastDirectMessage, broadcastGroupMessage } = require('../utils/chatRealtime');
+
+const getCurrentUser = async (req) => {
+  const user = req.user?.id
+    ? await User.findById(req.user.id)
+    : await User.findOne({ userid: req.user?.userId });
+
+  if (!user) {
+    const error = new Error('로그인 사용자를 찾을 수 없습니다. 다시 로그인해주세요.');
+    error.statusCode = 401;
+    throw error;
+  }
+
+  return user;
+};
+
+const assertAcceptedFriend = async (userId, friendId) => {
+  const relation = await Friend.findPair(userId, friendId);
+  if (!relation || String(relation.status).toLowerCase() !== 'accepted') {
+    const error = new Error('친구끼리만 1:1 채팅을 할 수 있습니다.');
+    error.statusCode = 403;
+    throw error;
+  }
+};
+
+const getAcceptedFriendIdSet = async (userId) => {
+  const friends = await Friend.findAcceptedByUser(userId);
+  return new Set(friends.map((relation) => {
+    const otherId = Number(relation.userId) === Number(userId) ? relation.friendId : relation.userId;
+    return Number(otherId);
+  }));
+};
+
+const assertGroupMembersAreFriends = async (ownerId, memberIds) => {
+  const friendIds = await getAcceptedFriendIdSet(ownerId);
+  const invalidId = memberIds.map(Number).find((id) => !friendIds.has(id));
+  if (invalidId) {
+    const error = new Error('친구만 단체 채팅방에 초대할 수 있습니다.');
+    error.statusCode = 403;
+    throw error;
+  }
+};
 
 const getConversations = async (req, res) => {
   try {
