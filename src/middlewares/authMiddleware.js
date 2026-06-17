@@ -1,17 +1,15 @@
 const { verifyToken: verifyJwtToken } = require('../utils/jwtHelper');
+const User = require('../models/User');
 
-// 1. 로그인 상태 확인 미들웨어
-const verifyToken = (req, res, next) => {
-    const token = req.headers.authorization?.split(' ')[1] || req.query.token;
-    if (!token) return res.status(401).json({ message: "인증 토큰이 없습니다." });
+const verifyToken = async (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1] || req.query.token;
+  if (!token) return res.status(401).json({ message: '인증 토큰이 없습니다.' });
 
-    try {
-        const decoded = verifyJwtToken(token);
-        req.user = {
-            ...decoded,
-            id: decoded.id || decoded.userPk || decoded.user_id,
-            userId: decoded.userId || decoded.userid
-        };
+  try {
+    const decoded = verifyJwtToken(token);
+    const idCandidate = decoded.id || decoded.userPk || decoded.user_id;
+    const loginIdCandidate = decoded.userId || decoded.userid;
+    let user = null;
 
     if (idCandidate && Number.isFinite(Number(idCandidate))) {
       user = await User.findById(Number(idCandidate));
