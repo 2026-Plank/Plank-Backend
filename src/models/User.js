@@ -44,6 +44,8 @@ const ensurePresenceColumn = async () => {
   await runIgnore(`ALTER TABLE users ADD statusMessage VARCHAR2(200 CHAR)`, [1430]);
 };
 
+const ensureProfileColumns = ensurePresenceColumn;
+
 const create = async ({ userid, email, password, name }) => {
   await execute(
     `INSERT INTO users (userid, email, password, name) VALUES (:userid, :email, :password, :name)`,
@@ -115,6 +117,7 @@ const search = async (keyword) => {
 
 module.exports = {
   ensurePresenceColumn,
+  ensureProfileColumns,
   create,
   findOne,
   findByLoginId,

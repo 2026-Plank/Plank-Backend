@@ -1,4 +1,5 @@
 const { register, login, approveUser } = require('../services/authService');
+const { toErrorResponse } = require('../utils/errorResponse');
 
 const sign = async (req, res) => {
   try {
@@ -10,7 +11,8 @@ const sign = async (req, res) => {
     const user = await register({ userid, email, password, name });
     res.status(201).json({ message: 'User registered', user });
   } catch (error) {
-    res.status(error.statusCode || 400).json({ message: error.message, error: error.message });
+    const response = toErrorResponse(error, 400);
+    res.status(response.statusCode).json(response.body);
   }
 };
 
@@ -26,7 +28,8 @@ const signin = async (req, res) => {
     const { user, token } = await login(loginId, password);
     res.json({ message: 'Login successful', token, user });
   } catch (error) {
-    res.status(error.statusCode || 401).json({ message: error.message, error: error.message });
+    const response = toErrorResponse(error, 401);
+    res.status(response.statusCode).json(response.body);
   }
 };
 
@@ -36,7 +39,8 @@ const approve = async (req, res) => {
     const user = await approveUser(userId);
     res.json({ message: 'User approved', user });
   } catch (error) {
-    res.status(400).json({ message: error.message, error: error.message });
+    const response = toErrorResponse(error, 400);
+    res.status(response.statusCode).json(response.body);
   }
 };
 
