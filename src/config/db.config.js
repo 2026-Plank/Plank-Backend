@@ -25,7 +25,7 @@ const connectDB = async () => {
       password: process.env.DB_PASSWORD,
       connectString: process.env.DB_CONNECT_STRING, // tnsnames.ora에서 가져온 full description
       poolMin: 2,
-      poolMax: 10,
+      poolMax: 20,
       queueTimeout: 10000, // 연결 대기 시간을 20초로 여유롭게 설정
     };
 
