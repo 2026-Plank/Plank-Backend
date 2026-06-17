@@ -7,8 +7,13 @@ const normalizeUser = (user) => {
   return {
     id: user.id,
     userid: user.userid,
+    userId: user.userid,
     email: user.email,
     name: user.name,
+    job: user.job,
+    status: user.status,
+    statusMessage: user.statusMessage,
+    presenceStatus: user.presenceStatus,
     profile: user.profile
   };
 };
@@ -43,13 +48,22 @@ const login = async (loginId, password) => {
   console.log('[AUTH-SVC] login() called with loginId:', loginId);
   const rawUser = await User.findByLoginId(loginId);
   console.log('[AUTH-SVC] User found:', rawUser ? `${rawUser.userid}` : 'null');
-  if (!rawUser || !(await bcrypt.compare(password, rawUser.password))) {
-    console.log('[AUTH-SVC] Credentials invalid');
-    throw new Error('Invalid credentials');
+  if (!rawUser) {
+    console.log('[AUTH-SVC] User not found');
+    const error = new Error('존재하지 않는 아이디입니다.');
+    error.statusCode = 401;
+    throw error;
+  }
+
+  if (!(await bcrypt.compare(password, rawUser.password))) {
+    console.log('[AUTH-SVC] Password invalid');
+    const error = new Error('비밀번호가 틀렸습니다.');
+    error.statusCode = 401;
+    throw error;
   }
   console.log('[AUTH-SVC] Credentials valid, generating token');
   const user = normalizeUser(rawUser);
-  const token = generateToken({ id: user.id });
+  const token = generateToken(user);
   return { user, token };
 };
 

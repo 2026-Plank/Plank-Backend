@@ -21,7 +21,33 @@ const ensurePresenceColumn = async () => {
         END IF;
     END;
   `);
+
+  await runIgnore(`ALTER TABLE users ADD job VARCHAR2(100 CHAR)`, [1430]);
+  await runIgnore(`ALTER TABLE users ADD statusMessage VARCHAR2(200 CHAR)`, [1430]);
 };
+
+const userSelectWithPassword = `
+  id AS "id",
+  userid AS "userid",
+  email AS "email",
+  password AS "password",
+  name AS "name",
+  job AS "job",
+  statusMessage AS "statusMessage",
+  profile AS "profile",
+  presenceStatus AS "presenceStatus"
+`;
+
+const userSelect = `
+  id AS "id",
+  userid AS "userid",
+  email AS "email",
+  name AS "name",
+  job AS "job",
+  statusMessage AS "statusMessage",
+  profile AS "profile",
+  presenceStatus AS "presenceStatus"
+`;
 
 const create = async ({ userid, email, password, name }) => {
   await execute(

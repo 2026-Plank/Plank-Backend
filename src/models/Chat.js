@@ -110,7 +110,7 @@ const ensureTable = async () => {
 
 const create = async ({ senderId, receiverId, message }) => {
   await execute(
-    `INSERT INTO chats (senderId, receiverId, message, timestamp) VALUES (:senderId, :receiverId, :message, SYSDATE)`,
+    `INSERT INTO chats (senderId, receiverId, message, timestamp) VALUES (:senderId, :receiverId, :message, CURRENT_TIMESTAMP)`,
     { senderId, receiverId, message }
   );
   const result = await execute(
@@ -233,7 +233,7 @@ const getGroupMemberIds = async (groupId) => {
 
 const createGroupMessage = async ({ groupId, senderId, message }) => {
   await execute(
-    `INSERT INTO chat_group_messages (groupId, senderId, message, timestamp) VALUES (:groupId, :senderId, :message, SYSDATE)`,
+    `INSERT INTO chat_group_messages (groupId, senderId, message, timestamp) VALUES (:groupId, :senderId, :message, CURRENT_TIMESTAMP)`,
     { groupId, senderId, message }
   );
   const result = await execute(
@@ -285,7 +285,8 @@ const getConversationSummaries = async (userId) => {
       u.userid AS "userid",
       u.email AS "email",
       u.name AS "name",
-      u.profile AS "profile",
+      u.job AS "job",
+      NULL AS "profile",
       u.presenceStatus AS "presenceStatus",
       latest.message AS "lastMessage",
       latest.timestamp AS "lastTimestamp",
@@ -300,7 +301,9 @@ const getConversationSummaries = async (userId) => {
           AND c.senderId = u.id
           AND c.timestamp > NVL(r.lastReadAt, TO_DATE('1970-01-01', 'YYYY-MM-DD'))
       ) AS "unreadCount"
-    FROM (
+    FROM friends f
+    JOIN users u ON u.id = CASE WHEN f.userId = :userId THEN f.friendId ELSE f.userId END
+    LEFT JOIN (
       SELECT otherId, message, timestamp
       FROM (
         SELECT
@@ -315,9 +318,10 @@ const getConversationSummaries = async (userId) => {
         WHERE senderId = :userId OR receiverId = :userId
       )
       WHERE rn = 1
-    ) latest
-    JOIN users u ON u.id = latest.otherId
-    ORDER BY latest.timestamp DESC
+    ) latest ON latest.otherId = u.id
+    WHERE (f.userId = :userId OR f.friendId = :userId)
+      AND LOWER(f.status) = 'accepted'
+    ORDER BY NVL(latest.timestamp, TO_DATE('1970-01-01', 'YYYY-MM-DD')) DESC
   `;
 
   const groupSql = `
@@ -325,6 +329,7 @@ const getConversationSummaries = async (userId) => {
       'group' AS "type",
       g.id AS "groupId",
       g.name AS "name",
+      '그룹 채팅' AS "job",
       latest.message AS "lastMessage",
       latest.timestamp AS "lastTimestamp",
       (

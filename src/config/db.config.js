@@ -3,8 +3,17 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 let pool;
+try {
+  oracledb.initOracleClient();
+} catch (err) {
+  console.log('Thick mode unavailable, using Thin mode:', err.message);
+}
 
 const connectDB = async () => {
+  if (pool) {
+    return pool;
+  }
+
   try {
     pool = await oracledb.createPool({
       user: process.env.DB_USER,
@@ -12,38 +21,44 @@ const connectDB = async () => {
       connectString: process.env.DB_CONNECT_STRING,
       poolMin: 1,
       poolMax: 5,
-      poolIncrement: 1
+      poolIncrement: 1,
+      poolTimeout: 60,
+      poolPingInterval: 60,
     });
 
-    // Verify a physical connection so invalid credentials fail fast.
-    const connection = await pool.getConnection();
-    await connection.close();
-
-    console.log('Oracle DB connected');
+    console.log('Oracle Pool Created');
+    return pool;
   } catch (error) {
     console.error('Oracle DB connection error:', error);
-    process.exit(1);
+    pool = null;
+    throw error;
   }
 };
 
 const execute = async (sql, binds = {}, options = {}) => {
   if (!pool) {
-    throw new Error('Oracle pool is not initialized. Call connectDB first.');
+    await connectDB();
   }
 
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
     const result = await connection.execute(sql, binds, {
       autoCommit: true,
       outFormat: oracledb.OUT_FORMAT_OBJECT,
       ...options
     });
     return result;
+  } catch (error) {
+    console.error('Query execution error:', error);
+    throw error;
   } finally {
-    try {
-      await connection.close();
-    } catch (err) {
-      console.error('Error closing Oracle connection:', err);
+    if (connection) {
+      try {
+        await connection.close();
+      } catch (err) {
+        console.error('Error closing Oracle connection:', err);
+      }
     }
   }
 };

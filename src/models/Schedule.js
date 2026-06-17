@@ -56,8 +56,27 @@ const findByIdAndUpdate = async (id, updates) => {
   return result.rows[0] || null;
 };
 
-const deleteById = async (id) => {
-  await execute(`DELETE FROM tasks_schedules WHERE id = :id`, { id });
+const create = async ({ userId, teamId = null, type, title, description, dpName, targetDate }) => {
+  const normalizedTeamId = normalizeTeamId(teamId);
+
+  await execute(
+    `INSERT INTO tasks_schedules (userId, teamId, type, title, description, dpName, status, targetDate, createdAt, updatedAt)
+     VALUES (:userId, :teamId, :type, :title, :description, :dpName, 'Wait', TO_DATE(:targetDate, 'YYYY-MM-DD'), SYSDATE, SYSDATE)`,
+    { userId, teamId: normalizedTeamId, type, title, description, dpName, targetDate }
+  );
+
+  const result = await execute(
+    `SELECT ${rowSelect}
+     FROM tasks_schedules
+     WHERE userId = :userId
+       AND NVL(teamId, -1) = NVL(:teamId, -1)
+       AND title = :title
+       AND targetDate = TO_DATE(:targetDate, 'YYYY-MM-DD')
+     ORDER BY createdAt DESC, id DESC
+     FETCH FIRST 1 ROWS ONLY`,
+    { userId, teamId: normalizedTeamId, title, targetDate }
+  );
+  return result.rows[0] || null;
 };
 
 module.exports = { create, findAll, findByTeamId, findByIdAndUpdate, deleteById };
