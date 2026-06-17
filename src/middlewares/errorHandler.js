@@ -1,6 +1,9 @@
+const { toErrorResponse } = require('../utils/errorResponse');
+
 const errorHandler = (err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: 'Internal Server Error' });
+  const response = toErrorResponse(err, 500);
+  res.status(response.statusCode).json(response.body);
 };
 
 module.exports = errorHandler;
