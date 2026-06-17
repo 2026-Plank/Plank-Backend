@@ -26,13 +26,14 @@ const ensureTable = async () => {
   `);
 };
 
-const create = async ({ fromUserId, toUserId, teamId, content, rating }) => {
+const create = async ({ fromUserId, toUserId, teamId, content, rating = 5 }) => {
+  const normalizedToUserId = toUserId || fromUserId;
   await execute(
     `INSERT INTO feedbacks (fromUserId, toUserId, teamId, content, rating, category, createdAt)
      VALUES (:fromUserId, :toUserId, :teamId, :content, :rating, :category, SYSDATE)`,
     {
       fromUserId,
-      toUserId,
+      toUserId: normalizedToUserId,
       teamId: teamId || null,
       content,
       rating,
@@ -44,7 +45,7 @@ const create = async ({ fromUserId, toUserId, teamId, content, rating }) => {
      FROM feedbacks
      WHERE fromUserId = :fromUserId AND toUserId = :toUserId AND content = :content
      ORDER BY id DESC FETCH FIRST 1 ROWS ONLY`,
-    { fromUserId, toUserId, content }
+    { fromUserId, toUserId: normalizedToUserId, content }
   );
   return result.rows[0] || null;
 };
