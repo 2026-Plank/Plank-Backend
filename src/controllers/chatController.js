@@ -1,4 +1,5 @@
 const Chat = require('../models/Chat');
+const { addClient, broadcastDirectMessage, broadcastGroupMessage } = require('../utils/chatRealtime');
 
 const getConversations = async (req, res) => {
   try {
@@ -37,6 +38,7 @@ const sendMessage = async (req, res) => {
       message: String(message).trim()
     });
     await Chat.upsertRead({ userId: req.user.id, targetType: 'direct', targetId: receiverId });
+    broadcastDirectMessage(chat);
     res.status(201).json({ message: 'Message sent', chat });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -108,10 +110,16 @@ const sendGroupMessage = async (req, res) => {
     if (!isMember) return res.status(403).json({ error: '그룹 멤버만 메시지를 보낼 수 있습니다.' });
     const chat = await Chat.createGroupMessage({ groupId, senderId: req.user.id, message });
     await Chat.upsertRead({ userId: req.user.id, targetType: 'group', targetId: groupId });
+    const memberIds = await Chat.getGroupMemberIds(groupId);
+    broadcastGroupMessage(memberIds, chat);
     res.status(201).json({ message: 'Message sent', chat });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+};
+
+const streamChatEvents = async (req, res) => {
+  addClient(req.user.id, res);
 };
 
 const deleteGroupMessage = async (req, res) => {
@@ -154,5 +162,6 @@ module.exports = {
   sendGroupMessage,
   deleteGroupMessage,
   markGroupRead,
-  searchMessages
+  searchMessages,
+  streamChatEvents
 };

@@ -2,7 +2,7 @@ const { verifyToken: verifyJwtToken } = require('../utils/jwtHelper');
 
 // 1. 로그인 상태 확인 미들웨어
 const verifyToken = (req, res, next) => {
-    const token = req.headers.authorization?.split(' ')[1];
+    const token = req.headers.authorization?.split(' ')[1] || req.query.token;
     if (!token) return res.status(401).json({ message: "인증 토큰이 없습니다." });
 
     try {
