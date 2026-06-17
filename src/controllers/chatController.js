@@ -1,7 +1,8 @@
 const Chat = require('../models/Chat');
 const Friend = require('../models/Friend');
+const Notification = require('../models/Notification');
 const User = require('../models/User');
-const { addClient, broadcastDirectMessage, broadcastGroupMessage } = require('../utils/chatRealtime');
+const { addClient, broadcastDirectMessage, broadcastGroupMessage, broadcastNotification } = require('../utils/chatRealtime');
 
 const getCurrentUser = async (req) => {
   const user = req.user?.id
@@ -42,6 +43,25 @@ const assertGroupMembersAreFriends = async (ownerId, memberIds) => {
     error.statusCode = 403;
     throw error;
   }
+};
+
+const previewMessage = (message) => {
+  const text = String(message || '').trim();
+  return text.length > 40 ? `${text.slice(0, 40)}...` : text;
+};
+
+const createChatNotification = async ({ userId, sender, message, targetType, targetId }) => {
+  const senderName = sender.name || sender.userid || '알 수 없는 사용자';
+  const notification = await Notification.create({
+    userId,
+    type: 'chat',
+    message: `${senderName}: ${previewMessage(message)}`,
+    targetType,
+    targetId: String(targetId),
+    actionPath: '/chat'
+  });
+  broadcastNotification(userId, notification);
+  return notification;
 };
 
 const getConversations = async (req, res) => {
@@ -89,6 +109,13 @@ const sendMessage = async (req, res) => {
     });
     await Chat.upsertRead({ userId: req.user.id, targetType: 'direct', targetId: receiverId });
     broadcastDirectMessage(chat);
+    await createChatNotification({
+      userId: receiverId,
+      sender: currentUser,
+      message: chat.message,
+      targetType: 'chat',
+      targetId: currentUser.id
+    });
     res.status(201).json({ message: 'Message sent', chat });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });
@@ -181,6 +208,15 @@ const sendGroupMessage = async (req, res) => {
     await Chat.upsertRead({ userId: req.user.id, targetType: 'group', targetId: groupId });
     const memberIds = await Chat.getGroupMemberIds(groupId);
     broadcastGroupMessage(memberIds, chat);
+    await Promise.all(memberIds
+      .filter((userId) => Number(userId) !== Number(currentUser.id))
+      .map((userId) => createChatNotification({
+        userId,
+        sender: currentUser,
+        message: chat.message,
+        targetType: 'chat_group',
+        targetId: groupId
+      })));
     res.status(201).json({ message: 'Message sent', chat });
   } catch (error) {
     res.status(error.statusCode || 500).json({ error: error.message });
