@@ -20,11 +20,12 @@ const connectDB = async () => {
       password: process.env.DB_PASSWORD,
       connectString: process.env.DB_CONNECT_STRING,
       walletPassword: process.env.WALLET_PASSWORD,
-      poolMin: 1,
-      poolMax: 4,
-      poolIncrement: 1,
-      poolTimeout: 60,
-      poolPingInterval: 60,
+      poolMin: 2,
+      poolMax: 10,
+      poolIncrement: 2,
+      queueTimeout: 5000,
+      poolTimeout: 30,
+      poolPingInterval: 30
     });
 
     console.log('=== Oracle DB Pool Created Successfully! ===');
