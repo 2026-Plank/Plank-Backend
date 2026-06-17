@@ -33,15 +33,23 @@ const assertTeamMember = async (teamId, user) => {
 };
 
 const getFeedbackTarget = async ({ teamId, toUserId, currentUser }) => {
-  if (!toUserId) {
+  let normalizedToUserId = toUserId;
+
+  if (!normalizedToUserId && teamId) {
+    const members = await Team.getMembers(teamId);
+    const targetMember = members.find((member) => String(member.userPk) !== String(currentUser.id));
+    normalizedToUserId = targetMember?.userPk;
+  }
+
+  if (!normalizedToUserId) {
     const error = new Error('Target user is required.');
     error.statusCode = 400;
     throw error;
   }
 
-  const targetUser = Number.isFinite(Number(toUserId))
-    ? await User.findById(Number(toUserId))
-    : await User.findOne({ userid: toUserId });
+  const targetUser = Number.isFinite(Number(normalizedToUserId))
+    ? await User.findById(Number(normalizedToUserId))
+    : await User.findOne({ userid: normalizedToUserId });
 
   if (!targetUser) {
     const error = new Error('Target user was not found.');

@@ -89,13 +89,14 @@ const getInvitableFriends = async (teamId, user) => {
   const userLoginId = user?.userid;
   const friendships = await Friend.findAcceptedByUser(userPk);
   const teamMembers = await Team.getMembers(teamId);
-  const memberIdSet = new Set(teamMembers.map((m) => String(m.id)));
+  const memberLoginIdSet = new Set(teamMembers.map((m) => String(m.id)));
+  const memberPkSet = new Set(teamMembers.map((m) => String(m.userPk)));
 
   const invitableFriends = await Promise.all(friendships.map(async (relation) => {
     const friendPk = Number(relation.userId) === Number(userPk) ? relation.friendId : relation.userId;
     const friendUser = await User.findById(friendPk);
     if (!friendUser) return null;
-    if (memberIdSet.has(String(friendUser.userid))) return null;
+    if (memberLoginIdSet.has(String(friendUser.userid)) || memberPkSet.has(String(friendUser.id))) return null;
     if (String(friendUser.userid) === String(userLoginId)) return null;
     return {
       id: friendUser.userid,
