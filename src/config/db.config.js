@@ -5,40 +5,37 @@ require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
 
-// 순수 Thin 모드로 작동하도록 명시
+// 💡 환경(Render 배포 vs 로컬)에 따라 지갑 파일 위치 자동 설정
+const isRender = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+const walletPath = isRender 
+  ? path.resolve(__dirname, '../../')       // Render에서는 최상위 루트 폴더에 Secret File이 생성됨
+  : path.resolve(__dirname, '../../wallet'); // 로컬에서는 프로젝트 하위 wallet 폴더 안을 바라봄
+
+// 💡 딱 한 번만 올바른 경로로 오라클 클라이언트 초기화
 try {
-  oracledb.initOracleClient({ thin: true });
+  oracledb.initOracleClient({ 
+    configDir: walletPath 
+  });
 } catch (err) {
-  // 중복 초기화 방지
+  // 중복 초기화 에러 방지
 }
 
-oracledb.initOracleClient({ 
-  configDir: path.resolve(__dirname, '../../wallet') 
-});
 let pool;
 
 const connectDB = async () => {
   if (pool) return pool;
 
   try {
-    console.log('데이터베이스 연결 시도 중... (Thin Mode with Wallet Buffer)');
+    console.log('데이터베이스 연결 시도 중... (Thin Mode with Secret Files)');
     
     const poolOptions = {
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
-      connectString: process.env.DB_CONNECT_STRING, // tnsnames.ora에서 가져온 full description
+      connectString: process.env.DB_CONNECT_STRING, // .env의 plankdb_medium 사용
       poolMin: 2,
       poolMax: 15,
-      queueTimeout: 10000, // 연결 대기 시간을 20초로 여유롭게 설정
+      queueTimeout: 10000, // 연결 대기 시간 10초
     };
-
-    if (process.env.WALLET_DATA) {
-      console.log('[INFO] WALLET_DATA 감지. 메모리 버퍼를 통해 mTLS 보안 인증을 수행합니다.');
-      poolOptions.walletPassword = process.env.WALLET_PASSWORD;
-      poolOptions.walletBuffer = Buffer.from(process.env.WALLET_DATA, 'base64');
-    } else {
-      console.warn('[WARN] WALLET_DATA 환경 변수가 존재하지 않습니다!');
-    }
 
     pool = await oracledb.createPool(poolOptions);
 
