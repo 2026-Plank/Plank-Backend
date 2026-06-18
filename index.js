@@ -22,7 +22,7 @@ const initializeDatabase = async () => {
     await connectDB();
     console.log('Oracle DB connected successfully.');
 
-    // await로 하나씩 순서대로 만들어야 오라클 DDL 락이 안 걸립니다!
+    // // await로 하나씩 순서대로 만들어야 오라클 DDL 락이 안 걸립니다!
     await User.ensureProfileColumns();
     await Team.ensureSchema();
     await Friend.ensureTable();
