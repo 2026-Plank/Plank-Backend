@@ -33,7 +33,7 @@ const connectDB = async () => {
       password: process.env.DB_PASSWORD,
       connectString: process.env.DB_CONNECT_STRING, 
       poolMin: 0, 
-      poolMax: 1,
+      poolMax: 3,
       queueTimeout: 60000, 
     };
 

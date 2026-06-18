@@ -19,11 +19,19 @@ const Schedule = require('./src/models/Schedule');
 // DB 및 테이블 초기화 로직
 const initializeDatabase = async () => {
   try {
-    console.log('데이터베이스 및 테이블 초기화 시작...');
+    console.log('데이터베이스 연결 시도 중...');
     await connectDB();
     console.log('Oracle DB connected successfully.');
 
-    // 하나씩 순서대로 만들어야 오라클 DDL 락이 안 걸립니다!
+    // 💡 [핵심 수정] 배포 환경(Render)이면 굳이 무거운 테이블 생성 검사를 하지 않고 종료합니다.
+    const isRender = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+    if (isRender) {
+      console.log('🚀 Render 배포 환경입니다. 테이블 검사를 생략하고 즉시 대기합니다.');
+      return;
+    }
+
+    // 로컬 컴퓨터에서 실행할 때만 테이블 생성을 안전하게 수행
+    console.log('로컬 환경: 테이블 초기화 검사를 시작합니다.');
     await User.ensureProfileColumns();
     await Team.ensureSchema();
     await Friend.ensureTable();
