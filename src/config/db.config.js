@@ -2,6 +2,9 @@ const oracledb = require('oracledb');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
+oracledb.initOracleClient({ 
+  configDir: path.resolve(__dirname, '../../wallet') 
+});
 let pool;
 
 const connectDB = async () => {
