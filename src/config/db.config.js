@@ -32,9 +32,9 @@ const connectDB = async () => {
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
       connectString: process.env.DB_CONNECT_STRING, 
-      poolMin: 1,
-      poolMax: 4,
-      queueTimeout: 60000,
+      poolMin: 0, 
+      poolMax: 1,
+      queueTimeout: 60000, 
     };
 
     pool = await oracledb.createPool(poolOptions);
