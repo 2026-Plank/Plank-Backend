@@ -31,10 +31,10 @@ const connectDB = async () => {
     const poolOptions = {
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
-      connectString: process.env.DB_CONNECT_STRING, // .env의 plankdb_medium 사용
-      poolMin: 2,
-      poolMax: 15,
-      queueTimeout: 10000, // 연결 대기 시간 10초
+      connectString: process.env.DB_CONNECT_STRING, 
+      poolMin: 1,
+      poolMax: 4,
+      queueTimeout: 60000,
     };
 
     pool = await oracledb.createPool(poolOptions);
