@@ -1,5 +1,13 @@
 const { execute } = require('../config/db.config');
 
+const runIgnore = async (sql, ignoredCodes = []) => {
+  try {
+    await execute(sql);
+  } catch (error) {
+    if (!ignoredCodes.includes(error.errorNum)) throw error;
+  }
+};
+
 const buildWhere = (filter) => {
   const keys = Object.keys(filter || {});
   if (!keys.length) return { clause: '', binds: {} };
@@ -7,21 +15,36 @@ const buildWhere = (filter) => {
   return { clause: `WHERE ${clauses.join(' AND ')}`, binds: { ...filter } };
 };
 
-const userSelect = 'SELECT id AS "id", userid AS "userid", email AS "email", password AS "password", name AS "name", profile AS "profile", presenceStatus AS "presenceStatus" FROM users';
-const publicUserSelect = 'SELECT id AS "id", userid AS "userid", email AS "email", name AS "name", profile AS "profile", presenceStatus AS "presenceStatus" FROM users';
+const userSelectWithPassword = `
+  id AS "id",
+  userid AS "userid",
+  email AS "email",
+  password AS "password",
+  name AS "name",
+  job AS "job",
+  statusMessage AS "statusMessage",
+  profile AS "profile",
+  presenceStatus AS "presenceStatus"
+`;
+
+const publicUserSelect = `
+  id AS "id",
+  userid AS "userid",
+  email AS "email",
+  name AS "name",
+  job AS "job",
+  statusMessage AS "statusMessage",
+  profile AS "profile",
+  presenceStatus AS "presenceStatus"
+`;
 
 const ensurePresenceColumn = async () => {
-  await execute(`
-    BEGIN
-      EXECUTE IMMEDIATE 'ALTER TABLE users ADD presenceStatus VARCHAR2(20) DEFAULT ''ONLINE'' NOT NULL';
-    EXCEPTION
-      WHEN OTHERS THEN
-        IF SQLCODE != -1430 THEN
-          RAISE;
-        END IF;
-    END;
-  `);
+  await runIgnore(`ALTER TABLE users ADD presenceStatus VARCHAR2(20) DEFAULT 'ONLINE' NOT NULL`, [1430]);
+  await runIgnore(`ALTER TABLE users ADD job VARCHAR2(100 CHAR)`, [1430]);
+  await runIgnore(`ALTER TABLE users ADD statusMessage VARCHAR2(200 CHAR)`, [1430]);
 };
+
+const ensureProfileColumns = ensurePresenceColumn;
 
 const create = async ({ userid, email, password, name }) => {
   await execute(
@@ -33,13 +56,13 @@ const create = async ({ userid, email, password, name }) => {
 
 const findOne = async (filter) => {
   const { clause, binds } = buildWhere(filter);
-  const result = await execute(`${userSelect} ${clause}`, binds);
+  const result = await execute(`SELECT ${userSelectWithPassword} FROM users ${clause}`, binds);
   return result.rows[0] || null;
 };
 
 const findByLoginId = async (loginId) => {
   const result = await execute(
-    `${userSelect} WHERE email = :loginId OR userid = :loginId`,
+    `SELECT ${userSelectWithPassword} FROM users WHERE email = :loginId OR userid = :loginId`,
     { loginId }
   );
   return result.rows[0] || null;
@@ -47,7 +70,7 @@ const findByLoginId = async (loginId) => {
 
 const findByEmailOrUserid = async ({ email, userid }) => {
   const result = await execute(
-    `${userSelect} WHERE email = :email OR userid = :userid`,
+    `SELECT ${userSelectWithPassword} FROM users WHERE email = :email OR userid = :userid`,
     { email, userid }
   );
   return result.rows[0] || null;
@@ -75,13 +98,14 @@ const findOneAndUpdate = async (filter, updates) => {
 
 const find = async (filter) => {
   const { clause, binds } = buildWhere(filter);
-  const result = await execute(`${publicUserSelect} ${clause}`, binds);
+  const result = await execute(`SELECT ${publicUserSelect} FROM users ${clause}`, binds);
   return result.rows;
 };
 
 const search = async (keyword) => {
   const result = await execute(
-    `${publicUserSelect}
+    `SELECT ${publicUserSelect}
+     FROM users
      WHERE LOWER(userid) LIKE LOWER(:keyword)
         OR LOWER(email) LIKE LOWER(:keyword)
         OR LOWER(name) LIKE LOWER(:keyword)
@@ -93,6 +117,7 @@ const search = async (keyword) => {
 
 module.exports = {
   ensurePresenceColumn,
+  ensureProfileColumns,
   create,
   findOne,
   findByLoginId,

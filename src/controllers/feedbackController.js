@@ -32,59 +32,6 @@ const assertTeamMember = async (teamId, user) => {
   }
 };
 
-const getFeedbackTarget = async ({ teamId, toUserId, currentUser }) => {
-  let normalizedToUserId = toUserId;
-
-  if (!normalizedToUserId && teamId) {
-    const members = await Team.getMembers(teamId);
-    const targetMember = members.find((member) => String(member.userPk) !== String(currentUser.id));
-    normalizedToUserId = targetMember?.userPk;
-  }
-
-  if (!normalizedToUserId) {
-    const error = new Error('Target user is required.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const targetUser = Number.isFinite(Number(normalizedToUserId))
-    ? await User.findById(Number(normalizedToUserId))
-    : await User.findOne({ userid: normalizedToUserId });
-
-  if (!targetUser) {
-    const error = new Error('Target user was not found.');
-    error.statusCode = 404;
-    throw error;
-  }
-
-  if (Number(targetUser.id) === Number(currentUser.id)) {
-    const error = new Error('Feedback cannot target yourself.');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (teamId) {
-    const isTargetMember = await Team.isMember(teamId, targetUser.userid);
-    if (!isTargetMember) {
-      const error = new Error('Target user is not a member of this team.');
-      error.statusCode = 400;
-      throw error;
-    }
-  }
-
-  return targetUser;
-};
-
-const normalizeRating = (rating) => {
-  const parsed = Number(rating ?? 5);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 5) {
-    const error = new Error('Rating must be an integer from 1 to 5.');
-    error.statusCode = 400;
-    throw error;
-  }
-  return parsed;
-};
-
 const mapFeedbackWithUsers = async (feedbacks) => {
   return Promise.all(
     feedbacks.map(async (feedback) => {
@@ -103,25 +50,24 @@ const mapFeedbackWithUsers = async (feedbacks) => {
 
 const createFeedback = async (req, res) => {
   try {
-    const { toUserId, teamId, content, rating } = req.body;
+    const { teamId, content } = req.body;
     const trimmedContent = content?.trim();
 
     if (!trimmedContent) {
       return res.status(400).json({ error: 'Feedback content is required.' });
     }
 
-    const currentUser = await getCurrentUser(req);
-    const isTeamFeedback = Boolean(teamId);
-    await assertTeamMember(teamId, currentUser);
+    if (!teamId) {
+      return res.status(400).json({ error: 'Project is required.' });
+    }
 
-    const targetUser = await getFeedbackTarget({ teamId, toUserId, currentUser });
+    const currentUser = await getCurrentUser(req);
+    await assertTeamMember(teamId, currentUser);
 
     const feedback = await Feedback.create({
       fromUserId: currentUser.id,
-      toUserId: targetUser.id,
       teamId,
-      content: trimmedContent,
-      rating: normalizeRating(rating)
+      content: trimmedContent
     });
 
     const [mappedFeedback] = await mapFeedbackWithUsers([feedback]);

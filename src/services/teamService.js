@@ -1,6 +1,8 @@
 const Team = require('../models/Team');
 const User = require('../models/User');
 const Friend = require('../models/Friend');
+const Notification = require('../models/Notification');
+const Schedule = require('../models/Schedule');
 const { generateInviteCode } = require('../utils/codeGenerator');
 
 const formatDate = (value) => {
@@ -13,7 +15,7 @@ const formatDate = (value) => {
   return `${year}-${month}-${day}`;
 };
 
-const normalizeTeam = (team) => {
+const normalizeTeam = (team, stats = null) => {
   if (!team) return null;
   return {
     id: team.id,
@@ -24,8 +26,17 @@ const normalizeTeam = (team) => {
     dpName: team.dpName,
     dpLeader: team.dpLeader,
     deadline: formatDate(team.deadline),
-    role: team.role
+    role: team.role,
+    progress: stats?.progress ?? team.progress ?? 0,
+    taskTotal: stats?.total ?? team.taskTotal ?? 0,
+    taskDone: stats?.done ?? team.taskDone ?? 0
   };
+};
+
+const withProgress = async (team) => {
+  if (!team?.id) return normalizeTeam(team);
+  const stats = await Schedule.getTeamProgressStats(team.id);
+  return normalizeTeam(team, stats);
 };
 
 const createTeam = async ({ name, deadline, creatorName, creatorId, department = '', description = '' }) => {
@@ -48,12 +59,25 @@ const createTeam = async ({ name, deadline, creatorName, creatorId, department =
   // Add creator as Admin
   await Team.addMember(team.id, creatorId, 'Admin');
 
-  return normalizeTeam(team);
+  const creator = await User.findOne({ userid: creatorId });
+  if (creator) {
+    await Notification.createOnce({
+      userId: creator.id,
+      type: 'project_created',
+      message: `${team.name} 프로젝트가 생성되었습니다.`,
+      targetType: 'team',
+      targetId: String(team.id),
+      actionPath: '/project',
+      dedupeKey: `project_created:${team.id}:${creatorId}`
+    });
+  }
+
+  return withProgress(team);
 };
 
 const getTeams = async (userId) => {
   const teams = await Team.getUserTeams(userId);
-  return teams.map(normalizeTeam);
+  return Promise.all(teams.map(withProgress));
 };
 
 const joinTeam = async (userid, inviteCode) => {
@@ -67,7 +91,7 @@ const joinTeam = async (userid, inviteCode) => {
   // Check if user is already a member
   const alreadyMember = await Team.isMember(team.id, userid);
   if (alreadyMember) {
-    return normalizeTeam(team);
+    return withProgress(team);
   }
 
   // Add user to team
@@ -77,7 +101,23 @@ const joinTeam = async (userid, inviteCode) => {
   const members = await Team.getMembers(team.id);
   await Team.update(team.id, { personnel: members.length });
 
-  return normalizeTeam({ ...team, personnel: members.length });
+  const joiningUser = await User.findOne({ userid });
+  const admins = members.filter((member) => member.role === 'Admin');
+  await Promise.all(admins.map(async (admin) => {
+    const adminUser = await User.findOne({ userid: admin.id });
+    if (!adminUser) return null;
+    return Notification.createOnce({
+      userId: adminUser.id,
+      type: 'project_member_joined',
+      message: `${joiningUser?.name || userid}님이 ${team.name} 프로젝트에 참가했습니다.`,
+      targetType: 'team',
+      targetId: String(team.id),
+      actionPath: '/project',
+      dedupeKey: `project_member_joined:${team.id}:${userid}`
+    });
+  }));
+
+  return withProgress({ ...team, personnel: members.length });
 };
 
 const getTeamMembers = async () => {
@@ -155,7 +195,19 @@ const inviteFriendToTeam = async (teamId, friendId, user) => {
   await Team.addMember(teamId, friendUser.userid, 'User');
   const updatedMembers = await Team.getMembers(teamId);
   await Team.update(teamId, { personnel: updatedMembers.length });
-  return normalizeTeam({ ...await Team.findOne({ id: teamId }), personnel: updatedMembers.length });
+  const updatedTeam = await Team.findOne({ id: teamId });
+
+  await Notification.createOnce({
+    userId: friendUser.id,
+    type: 'project_invite',
+    message: `${user?.name || userLoginId}님이 ${updatedTeam?.name || '프로젝트'}에 초대했습니다.`,
+    targetType: 'team',
+    targetId: String(teamId),
+    actionPath: '/project',
+    dedupeKey: `project_invite:${teamId}:${friendUser.userid}`
+  });
+
+  return withProgress({ ...updatedTeam, personnel: updatedMembers.length });
 };
 
 const updateTeam = async (teamId, updates, userId) => {
@@ -181,7 +233,7 @@ const updateTeam = async (teamId, updates, userId) => {
   }
 
   const team = await Team.update(teamId, normalizedUpdates);
-  return normalizeTeam(team);
+  return withProgress(team);
 };
 
 const deleteTeam = async (teamId, userId) => {
@@ -208,7 +260,7 @@ const getTeamDetails = async (teamId, userId) => {
 
   const team = await Team.findOne({ id: teamId });
   const members = await Team.getMembers(teamId);
-  return { ...normalizeTeam(team), members };
+  return { ...(await withProgress(team)), members };
 };
 
 const removeTeamMember = async (teamId, targetUserId, userId) => {
@@ -268,4 +320,74 @@ const updateMyDepartment = async (teamId, userId, department, jobDetail = '') =>
   await Team.updateMemberDepartment(teamId, userId, normalizedDepartment, normalizedJobDetail, role);
   return { department: normalizedDepartment, jobDetail: normalizedJobDetail, role };
 };
-module.exports = { createTeam, getTeams, joinTeam, getTeamMembers, getInvitableFriends, inviteFriendToTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService, updateMyDepartment };
+const getProjectTodos = async (teamId, userId) => {
+  const isMember = await Team.isMember(teamId, userId);
+  if (!isMember) {
+    const error = new Error('팀 멤버만 접근할 수 있습니다.');
+    error.statusCode = 403;
+    throw error;
+  }
+  const todos = await Schedule.findProjectTodosByTeamId(teamId);
+  return todos.map((t) => ({ id: t.id, title: t.title, status: t.status }));
+};
+
+const createProjectTodo = async (teamId, userId, title) => {
+  if (!title || !String(title).trim()) {
+    const error = new Error('할 일 제목을 입력해주세요.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const isMember = await Team.isMember(teamId, userId);
+  if (!isMember) {
+    const error = new Error('팀 멤버만 접근할 수 있습니다.');
+    error.statusCode = 403;
+    throw error;
+  }
+  const user = await User.findOne({ userid: userId });
+  const team = await Team.findOne({ id: teamId });
+  const today = new Date().toISOString().split('T')[0];
+  const todo = await Schedule.create({
+    userId: user.id,
+    teamId,
+    type: 'ProjectTodo',
+    title: String(title).trim(),
+    description: '',
+    dpName: team?.name || '',
+    targetDate: today,
+  });
+  return { id: todo.id, title: todo.title, status: todo.status };
+};
+
+const toggleProjectTodo = async (teamId, todoId, userId, status) => {
+  const allowedStatuses = ['Wait', 'Done'];
+  if (!allowedStatuses.includes(status)) {
+    const error = new Error('올바르지 않은 상태값입니다.');
+    error.statusCode = 400;
+    throw error;
+  }
+  const isMember = await Team.isMember(teamId, userId);
+  if (!isMember) {
+    const error = new Error('팀 멤버만 접근할 수 있습니다.');
+    error.statusCode = 403;
+    throw error;
+  }
+  const updated = await Schedule.updateProjectTodoStatus(todoId, teamId, status);
+  if (!updated) {
+    const error = new Error('할 일을 찾을 수 없습니다.');
+    error.statusCode = 404;
+    throw error;
+  }
+  return { id: updated.id, title: updated.title, status: updated.status };
+};
+
+const deleteProjectTodo = async (teamId, todoId, userId) => {
+  const isMember = await Team.isMember(teamId, userId);
+  if (!isMember) {
+    const error = new Error('팀 멤버만 접근할 수 있습니다.');
+    error.statusCode = 403;
+    throw error;
+  }
+  await Schedule.deleteProjectTodoById(todoId, teamId);
+};
+
+module.exports = { createTeam, getTeams, joinTeam, getTeamMembers, getInvitableFriends, inviteFriendToTeam, updateTeam, deleteTeam, getTeamDetails, removeTeamMember, updateMemberRoleService, updateMyDepartment, getProjectTodos, createProjectTodo, toggleProjectTodo, deleteProjectTodo };

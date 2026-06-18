@@ -155,6 +155,9 @@ const update = async (id, updates) => {
 };
 
 const remove = async (id) => {
+  await execute(`DELETE FROM tasks_schedules WHERE teamid = :id`, { id });
+  await execute(`DELETE FROM feedbacks WHERE teamid = :id`, { id });
+  await execute(`DELETE FROM notifications WHERE targetType = 'team' AND targetId = :targetId`, { targetId: String(id) });
   await execute(`DELETE FROM team_members WHERE teamid = :id`, { id });
   await execute(`DELETE FROM teams WHERE id = :id`, { id });
 };

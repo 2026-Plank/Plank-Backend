@@ -1,5 +1,16 @@
 const { execute } = require('../config/db.config');
 
+const rowSelect = `
+  id AS "id",
+  fromUserId AS "fromUserId",
+  toUserId AS "toUserId",
+  teamId AS "teamId",
+  content AS "content",
+  rating AS "rating",
+  category AS "category",
+  TO_CHAR(createdAt, 'YYYY-MM-DD"T"HH24:MI:SS') AS "createdAt"
+`;
+
 const ensureTable = async () => {
   await execute(`
     BEGIN
@@ -12,7 +23,7 @@ const ensureTable = async () => {
           content VARCHAR2(1000) NOT NULL,
           rating NUMBER(1) DEFAULT 5 NOT NULL,
           category VARCHAR2(20) DEFAULT ''team'' NOT NULL,
-          createdAt DATE DEFAULT SYSDATE NOT NULL,
+          createdAt DATE DEFAULT CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL ''9'' HOUR AS DATE) NOT NULL,
           CONSTRAINT chk_feedback_rating CHECK (rating BETWEEN 1 AND 5),
           CONSTRAINT chk_feedback_category CHECK (category IN (''personal'', ''team''))
         )
@@ -26,13 +37,14 @@ const ensureTable = async () => {
   `);
 };
 
-const create = async ({ fromUserId, toUserId, teamId, content, rating }) => {
+const create = async ({ fromUserId, toUserId, teamId, content, rating = 5 }) => {
+  const normalizedToUserId = toUserId || fromUserId;
   await execute(
     `INSERT INTO feedbacks (fromUserId, toUserId, teamId, content, rating, category, createdAt)
-     VALUES (:fromUserId, :toUserId, :teamId, :content, :rating, :category, SYSDATE)`,
+     VALUES (:fromUserId, :toUserId, :teamId, :content, :rating, :category, CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR AS DATE))`,
     {
       fromUserId,
-      toUserId,
+      toUserId: normalizedToUserId,
       teamId: teamId || null,
       content,
       rating,
@@ -40,11 +52,11 @@ const create = async ({ fromUserId, toUserId, teamId, content, rating }) => {
     }
   );
   const result = await execute(
-    `SELECT id AS "id", fromUserId AS "fromUserId", toUserId AS "toUserId", teamId AS "teamId", content AS "content", rating AS "rating", category AS "category", createdAt AS "createdAt"
+    `SELECT ${rowSelect}
      FROM feedbacks
      WHERE fromUserId = :fromUserId AND toUserId = :toUserId AND content = :content
      ORDER BY id DESC FETCH FIRST 1 ROWS ONLY`,
-    { fromUserId, toUserId, content }
+    { fromUserId, toUserId: normalizedToUserId, content }
   );
   return result.rows[0] || null;
 };
@@ -53,7 +65,7 @@ const find = async (filter) => {
   const keys = Object.keys(filter || {});
   const clause = keys.length ? `WHERE ${keys.map((key) => `${key} = :${key}`).join(' AND ')}` : '';
   const result = await execute(
-    `SELECT id AS "id", fromUserId AS "fromUserId", toUserId AS "toUserId", teamId AS "teamId", content AS "content", rating AS "rating", category AS "category", createdAt AS "createdAt"
+    `SELECT ${rowSelect}
      FROM feedbacks ${clause}
      ORDER BY createdAt DESC, id DESC`,
     filter
@@ -63,7 +75,7 @@ const find = async (filter) => {
 
 const findByTeamId = async (teamId) => {
   const result = await execute(
-    `SELECT id AS "id", fromUserId AS "fromUserId", toUserId AS "toUserId", teamId AS "teamId", content AS "content", rating AS "rating", category AS "category", createdAt AS "createdAt"
+    `SELECT ${rowSelect}
      FROM feedbacks
      WHERE teamId = :teamId
      ORDER BY createdAt DESC, id DESC`,

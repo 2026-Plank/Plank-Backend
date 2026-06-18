@@ -87,8 +87,8 @@
     "safer-buffer": "^2.1.2",
     "semver": "^7.7.4",
     "send": "^1.2.1",
-    "serve-static": "^2.2.1",
     "sequelize": "^6.37.8",
+    "serve-static": "^2.2.1",
     "setprototypeof": "^1.2.0",
     "side-channel": "^1.1.0",
     "side-channel-list": "^1.0.1",
@@ -104,7 +104,8 @@
     "wrappy": "^1.0.2"
   },
   "scripts": {
-    "start": "node src/app.js",
+    "start": "node index.js",
+    "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -118,6 +119,5 @@
   "bugs": {
     "url": "https://github.com/2026-Plank/Plank-Backend/issues"
   },
-  "homepage": "https://github.com/2026-Plank/Plank-Backend#readme",
-  "devDependencies": {}
+  "homepage": "https://github.com/2026-Plank/Plank-Backend#readme"
 }

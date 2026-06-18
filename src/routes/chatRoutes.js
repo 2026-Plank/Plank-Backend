@@ -12,12 +12,14 @@ const {
   sendGroupMessage,
   deleteGroupMessage,
   markGroupRead,
-  searchMessages
+  searchMessages,
+  streamChatEvents
 } = require('../controllers/chatController');
 const { verifyToken } = require('../middlewares/authMiddleware');
 
 router.get('/conversations', verifyToken, getConversations);
 router.get('/search', verifyToken, searchMessages);
+router.get('/events', verifyToken, streamChatEvents);
 
 router.post('/groups', verifyToken, createGroup);
 router.post('/groups/:groupId/members', verifyToken, addGroupMembers);
